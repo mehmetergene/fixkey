@@ -1,0 +1,1368 @@
+#!/bin/bash
+# Copyright © 2026 Mehmet Ergene. Licensed under CC BY-NC 4.0: non-commercial use only, credit required. See LICENSE.
+#
+# Fixkey's helper on the Mac. Without arguments, or when you double-click Fixkey Setup.command, it shows a menu,
+# or starts the setup the first time.
+#
+#   ./fixkey setup               guided setup: asks a few questions, checks and installs everything
+#   ./fixkey reinstall           build and install on the iPhone again: 7 more days with a free Apple ID
+#   ./fixkey autostart on|off    start the relay by itself when you log in, only on Wi-Fi networks you allow
+#   ./fixkey autostart add       allow the Wi-Fi network this Mac is on now
+#   ./fixkey reminder on|off     remind you when the 7 days on the iPhone are over
+#   ./fixkey relay               run the relay in this window instead (when it doesn't start by itself)
+#   ./fixkey doctor              check everything and say what to fix; changes nothing
+#   ./fixkey uninstall           remove what Fixkey set up on this Mac (this folder and the iPhone app stay)
+#
+# Single steps, for AI assistants and scripts (see SETUP.md):
+#   ./fixkey model                                     choose the language model (the tested one is recommended)
+#   ./fixkey model use <repo:quant> | evaluate         use a given model | score the model on Fixkey's test cases
+#   ./fixkey configure [--team ID] [--prefix PREFIX]   create the key, certificate and Config/Local.xcconfig
+#   ./fixkey install [--device UDID]                   build and install on the iPhone (same as reinstall)
+#   ./fixkey test                                      check the running relay from the Mac
+#
+# Options: --lang en|da   --yes (take the suggested answer to every question and never wait for Enter)
+
+cd "$(dirname "$0")" || exit 1
+
+RECOMMENDED_MODEL="unsloth/Qwen3.5-4B-GGUF:Q4_K_M"
+RECOMMENDED_SCORE="45/53"
+RELAY_DIR=Tools/lan-relay
+KEY_FILE=$RELAY_DIR/key.txt
+CERT_FILE=$RELAY_DIR/relay-cert.pem
+CERT_KEY_FILE=$RELAY_DIR/relay-key.pem
+LOCAL_CONFIG=Config/Local.xcconfig
+BUILD_DIR=build/device
+APP_PATH=$BUILD_DIR/Build/Products/Release-iphoneos/Fixkey.app
+RELAY_LOG=build/relay-setup.log
+# What runs by itself lives outside this folder: macOS doesn't let background programs read Downloads or Documents.
+SUPPORT_DIR="$HOME/Library/Application Support/Fixkey"
+AUTOSTART_DIR="$SUPPORT_DIR/relay"
+NETWORKS_FILE="$SUPPORT_DIR/networks.txt"
+LOG_DIR="$HOME/Library/Logs/Fixkey"
+AGENTS_DIR="$HOME/Library/LaunchAgents"
+RELAY_AGENT=local.fixkey.relay
+REMINDER_AGENT=local.fixkey.reminder
+XCODE_STORE_URL="macappstore://apps.apple.com/app/id497799835"
+LLAMA_URL="https://llama.app"
+
+# MARK: Options
+
+LANG_CODE=en
+case "$(defaults read -g AppleLanguages 2>/dev/null | tr -d ' \n"()' | cut -d, -f1)" in da*) LANG_CODE=da ;; esac
+COMMAND="" ACTION="" VALUE="" ASSUME_YES=0 TEAM_ARG="" PREFIX_ARG="" DEVICE_ARG=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --lang) LANG_CODE=${2:-en}; shift ;;
+    --lang=*) LANG_CODE=${1#--lang=} ;;
+    --yes | -y) ASSUME_YES=1 ;;
+    --team) TEAM_ARG=${2:-}; shift ;;
+    --prefix) PREFIX_ARG=${2:-}; shift ;;
+    --device) DEVICE_ARG=${2:-}; shift ;;
+    -h | --help) COMMAND=help ;;
+    -*) echo "Unknown option: $1 (see ./fixkey help)" >&2; exit 2 ;;
+    *) if [ -z "$COMMAND" ]; then COMMAND=$1; elif [ -z "$ACTION" ]; then ACTION=$1; else VALUE=$1; fi ;;
+  esac
+  shift
+done
+[ "$LANG_CODE" = da ] || LANG_CODE=en
+
+# MARK: Output and questions
+
+if [ -t 1 ]; then
+  BOLD=$'\033[1m' DIM=$'\033[2m' GREEN=$'\033[32m' RED=$'\033[31m' YELLOW=$'\033[33m' RESET=$'\033[0m'
+else
+  BOLD="" DIM="" GREEN="" RED="" YELLOW="" RESET=""
+fi
+PROBLEMS=0
+
+# Every message comes in English and Danish: t "English" "Dansk".
+t() { if [ "$LANG_CODE" = da ]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
+say() { printf '%s\n' "$(t "$1" "$2")"; }
+title() { printf '\n%s%s%s\n' "$BOLD" "$(t "$1" "$2")" "$RESET"; }
+info() { printf '  %s\n' "$(t "$1" "$2")"; }
+ok() { printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$(t "$1" "$2")"; }
+fail() { printf '  %s✗%s %s\n' "$RED" "$RESET" "$(t "$1" "$2")"; PROBLEMS=$((PROBLEMS + 1)); }
+note() { printf '  %s!%s %s\n' "$YELLOW" "$RESET" "$(t "$1" "$2")"; }
+hint() { printf '    %s%s%s\n' "$DIM" "$(t "$1" "$2")" "$RESET"; }
+
+interactive() { [ "$ASSUME_YES" = 0 ] && [ -t 0 ]; }
+
+# ask_yes "Question?" "Spørgsmål?" [y|n]: the suggested answer is used with --yes or plain Enter.
+ask_yes() {
+  local default=${3:-y} answer choices
+  if ! interactive; then [ "$default" = y ]; return; fi
+  if [ "$default" = y ]; then choices=$(t "[Y/n]" "[J/n]"); else choices=$(t "[y/N]" "[j/N]"); fi
+  read -r -p "  $(t "$1" "$2") $choices " answer || answer=""
+  answer=$(printf '%s' "${answer:-$default}" | tr '[:upper:]' '[:lower:]')
+  case "$answer" in y | yes | j | ja) return 0 ;; *) return 1 ;; esac
+}
+
+# ask "Question" "Spørgsmål" suggestion: prints the answer.
+ask() {
+  local answer
+  if ! interactive; then printf '%s' "$3"; return; fi
+  read -r -p "  $(t "$1" "$2") [$3] " answer || answer=""
+  printf '%s' "${answer:-$3}"
+}
+
+pause() {
+  interactive || return 0
+  read -r -p "  $(t "${1:-Press Enter to continue.}" "${2:-Tryk Enter for at fortsætte.}") " _ || true
+}
+
+# Runs a check until it passes, showing how to fix it in between. Without a person to ask, it stops instead.
+require() {
+  while ! "$@"; do
+    if ! interactive; then
+      info "Fix this, then run the command again." "Ret det, og kør kommandoen igen."
+      exit 1
+    fi
+    pause "Press Enter to check again (Ctrl+C stops)." "Tryk Enter for at tjekke igen (Ctrl+C stopper)."
+  done
+}
+
+# Runs a long command with its output in a log file, printing a dot every two seconds.
+with_dots() {
+  local log=$1 pid status
+  shift
+  mkdir -p "$(dirname "$log")"
+  "$@" >"$log" 2>&1 &
+  pid=$!
+  printf '  '
+  while kill -0 "$pid" 2>/dev/null; do printf '.'; sleep 2; done
+  wait "$pid"
+  status=$?
+  printf '\n'
+  return $status
+}
+
+# MARK: Settings file
+
+config_value() { sed -n "s/^$1 *= *//p" "$LOCAL_CONFIG" 2>/dev/null | tail -1; }
+bundle_id() { printf '%s.fixkey' "$(config_value FIXKEY_BUNDLE_ID_PREFIX)"; }
+mac_host() { local name; name=$(scutil --get LocalHostName 2>/dev/null); [ -n "$name" ] && printf '%s.local' "$name"; }
+wifi_address() { ipconfig getifaddr en0 2>/dev/null; }
+fingerprint() { openssl x509 -in "$CERT_FILE" -outform der 2>/dev/null | shasum -a 256 | cut -d' ' -f1; }
+valid_team() { printf '%s' "$1" | grep -Eq '^[A-Z0-9]{10}$'; }
+valid_prefix() { printf '%s' "$1" | grep -Eq '^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z0-9-]+)+$'; }
+valid_key() { [ -f "$KEY_FILE" ] && tr -d '\n' <"$KEY_FILE" | grep -Eq '^[!-~]{32,}$'; }
+private_file() { [ -f "$1" ] && [ "$(stat -f '%Lp' "$1")" = 600 ]; }
+
+# MARK: Checks
+
+check_mac() {
+  local gb free need=5
+  if [ "$(uname -m)" = arm64 ]; then
+    ok "Mac with Apple silicon" "Mac med Apple silicon"
+  else
+    fail "This Mac has an Intel processor. Fixkey is only tested on Apple silicon; the model may be too slow." \
+      "Denne Mac har en Intel-processor. Fixkey er kun testet på Apple silicon; modellen kan være for langsom."
+  fi
+  gb=$(($(sysctl -n hw.memsize) / 1073741824))
+  if [ "$gb" -ge 8 ]; then ok "$gb GB memory" "$gb GB hukommelse"; else fail "$gb GB memory; Fixkey needs 8 GB." "$gb GB hukommelse; Fixkey kræver 8 GB."; fi
+  [ -d /Applications/Xcode.app ] || need=20
+  free=$(df -g "$HOME" | awk 'NR==2 {print $4}')
+  if [ "${free:-0}" -ge "$need" ]; then
+    ok "$free GB free disk space" "$free GB ledig plads"
+  else
+    fail "Only $free GB free disk space; about $need GB is needed." "Kun $free GB ledig plads; der skal bruges cirka $need GB."
+  fi
+}
+
+check_xcode() {
+  if ! ls -d /Applications/Xcode*.app >/dev/null 2>&1; then
+    fail "Xcode isn't installed." "Xcode er ikke installeret."
+    hint "Install Xcode from the App Store. It's free and large; let it finish, open it once, then come back." \
+      "Installer Xcode fra App Store. Den er gratis og stor; lad den blive færdig, åbn den én gang, og kom så tilbage."
+    return 1
+  fi
+  case "$(xcode-select -p 2>/dev/null)" in
+    *.app/Contents/Developer) ;;
+    *)
+      fail "Xcode is installed but Terminal doesn't use it yet." "Xcode er installeret, men Terminal bruger den ikke endnu."
+      hint "Run this once (it asks for your Mac password): sudo xcode-select -s /Applications/Xcode.app" \
+        "Kør dette én gang (det beder om din Macs adgangskode): sudo xcode-select -s /Applications/Xcode.app"
+      return 1
+      ;;
+  esac
+  if ! xcodebuild -license check >/dev/null 2>&1 || ! xcodebuild -checkFirstLaunchStatus >/dev/null 2>&1; then
+    fail "Xcode hasn't finished its first start." "Xcode er ikke færdig med sin første start."
+    hint "Open Xcode once, click Agree, and let it install what it asks for." \
+      "Åbn Xcode én gang, klik Agree (Accepter), og lad den installere det, den beder om."
+    return 1
+  fi
+  if ! xcodebuild -showsdks 2>/dev/null | grep -q iphoneos; then
+    fail "Xcode can't build for iPhone yet." "Xcode kan ikke bygge til iPhone endnu."
+    hint "In Xcode, open Settings › Components and get iOS." "Åbn Settings › Components i Xcode, og hent iOS."
+    return 1
+  fi
+  ok "$(xcodebuild -version 2>/dev/null | head -1)" "$(xcodebuild -version 2>/dev/null | head -1)"
+}
+
+fix_xcode() {
+  if ! ls -d /Applications/Xcode*.app >/dev/null 2>&1; then
+    ask_yes "Open Xcode in the App Store now?" "Åbn Xcode i App Store nu?" y && open "$XCODE_STORE_URL"
+  elif ! xcodebuild -license check >/dev/null 2>&1 || ! xcodebuild -checkFirstLaunchStatus >/dev/null 2>&1; then
+    ask_yes "Open Xcode now?" "Åbn Xcode nu?" y && open -a Xcode
+  fi
+}
+
+# Teams from the Apple IDs signed in to Xcode, one per line: TEAMID, 1 for a free Personal Team or 0, team name.
+list_teams() {
+  defaults export com.apple.dt.Xcode - 2>/dev/null | python3 -I -c '
+import plistlib, sys
+try:
+    accounts = plistlib.loads(sys.stdin.buffer.read()).get("IDEProvisioningTeamByIdentifier", {})
+except Exception:
+    sys.exit()
+seen = set()
+for teams in accounts.values():
+    for team in teams:
+        if team.get("teamID") and team["teamID"] not in seen:
+            seen.add(team["teamID"])
+            print(team["teamID"], 1 if team.get("isFreeProvisioningTeam") else 0, team.get("teamName", ""), sep="\t")
+'
+}
+
+check_apple_id() {
+  if [ -z "$(list_teams)" ]; then
+    fail "Xcode isn't signed in to an Apple ID." "Xcode er ikke logget ind med et Apple-id."
+    hint "In Xcode, open Settings (⌘,) › Apple Accounts (just Accounts in older Xcode), click +, choose Apple ID and sign in. A free Apple ID is enough." \
+      "Åbn Settings (⌘,) › Apple Accounts (Accounts i ældre Xcode) i Xcode, klik +, vælg Apple ID, og log ind. Et gratis Apple-id er nok."
+    return 1
+  fi
+  ok "Xcode is signed in to your Apple ID" "Xcode er logget ind med dit Apple-id"
+}
+
+fix_apple_id() { ask_yes "Open Xcode now?" "Åbn Xcode nu?" y && open -a Xcode; }
+
+llama_app() {
+  local path
+  for path in /Applications/Llama.app "$HOME/Applications/Llama.app"; do [ -d "$path" ] && { echo "$path"; return; }; done
+  mdfind "kMDItemCFBundleIdentifier == 'app.llama.Llama'" 2>/dev/null | head -1
+}
+llama_port() { local port; port=$(defaults read app.llama.Llama serverPort 2>/dev/null); case "$port" in '' | *[!0-9]*) echo 9931 ;; *) echo "$port" ;; esac; }
+llama_running() { curl -sf -o /dev/null --max-time 3 "http://127.0.0.1:$(llama_port)/v1/models"; }
+llama_models() {
+  curl -sf --max-time 3 "http://127.0.0.1:$(llama_port)/v1/models" | python3 -I -c 'import json, sys
+try: print("\n".join(m["id"] for m in json.load(sys.stdin)["data"]))
+except Exception: pass'
+}
+llama_has_model() { llama_models | grep -qxF "$1"; }
+current_model() { local model; model=$(config_value FIXKEY_MODEL); echo "${model:-$RECOMMENDED_MODEL}"; }
+valid_model() { printf '%s' "$1" | grep -Eq '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(:[A-Za-z0-9._-]+)?$'; }
+llama_cli() {
+  local path
+  command -v llama 2>/dev/null && return
+  for path in "$HOME/.local/bin/llama" "$HOME/.llama-app/llama"; do [ -x "$path" ] && { echo "$path"; return; }; done
+}
+
+start_llama() {
+  local app i
+  app=$(llama_app)
+  [ -n "$app" ] || return 1
+  llama_running && return 0
+  open -a "$app"
+  for i in $(seq 1 30); do llama_running && return 0; sleep 1; done
+  return 1
+}
+
+restart_llama() {
+  osascript -e 'tell application id "app.llama.Llama" to quit' >/dev/null 2>&1
+  sleep 3
+  start_llama
+}
+
+check_llama() {
+  if [ -z "$(llama_app)" ]; then
+    fail "Llama.app isn't installed." "Llama.app er ikke installeret."
+    hint "Download it from $LLAMA_URL, move it to Applications and open it once." \
+      "Hent den fra $LLAMA_URL, flyt den til Programmer, og åbn den én gang."
+    return 1
+  fi
+  if ! llama_running; then
+    fail "Llama.app isn't running." "Llama.app kører ikke."
+    hint "Open Llama.app." "Åbn Llama.app."
+    return 1
+  fi
+  ok "Llama.app is running (port $(llama_port))" "Llama.app kører (port $(llama_port))"
+}
+
+fix_llama() {
+  [ -z "$(llama_app)" ] && ask_yes "Open the Llama.app website now?" "Åbn Llama.apps hjemmeside nu?" y && open "$LLAMA_URL"
+}
+
+check_model() {
+  local model
+  model=$(current_model)
+  if ! llama_has_model "$model"; then
+    fail "The model ($model) isn't downloaded." "Modellen ($model) er ikke hentet."
+    hint "Run ./fixkey model" "Kør ./fixkey model"
+    return 1
+  fi
+  if [ "$model" = "$RECOMMENDED_MODEL" ]; then
+    ok "Model $model (recommended)" "Model $model (anbefalet)"
+  else
+    ok "Model $model (your choice; the tested one is $RECOMMENDED_MODEL)" "Model $model (dit valg; den testede er $RECOMMENDED_MODEL)"
+  fi
+}
+
+# The model list: the recommended one first, then the others in Llama.app. Sets CHOSEN_MODEL.
+choose_model() {
+  local list number=0 id choice current mark
+  current=${CHOSEN_MODEL:-$(current_model)}
+  list=$({ echo "$RECOMMENDED_MODEL"; llama_models; } | awk 'NF && !seen[$0]++')
+  info "Models for Fixkey (Llama.app runs them on this Mac):" "Modeller til Fixkey (Llama.app kører dem på denne Mac):"
+  while IFS= read -r id; do
+    number=$((number + 1))
+    mark=""
+    [ "$id" = "$RECOMMENDED_MODEL" ] && mark=$(t " — recommended, tested: $RECOMMENDED_SCORE" " — anbefalet, testet: $RECOMMENDED_SCORE")
+    llama_has_model "$id" || mark="$mark$(t " (not downloaded)" " (ikke hentet)")"
+    [ "$id" = "$current" ] && mark="$mark$(t " ← now" " ← nu")"
+    printf '    %d) %s%s\n' "$number" "$id" "$mark"
+  done <<<"$list"
+  printf '    d) %s\n' "$(t "Download another model from Hugging Face" "Hent en anden model fra Hugging Face")"
+  choice=$(ask "Model" "Model" "$(printf '%s\n' "$list" | grep -nxF "$current" | cut -d: -f1 | head -1)")
+  case "$choice" in
+    d | D)
+      info "Write it as on Hugging Face, with the quantization after a colon. Small (≤ 4B) models at Q4 suit 8 GB Macs." \
+        "Skriv den som på Hugging Face med kvantiseringen efter et kolon. Små modeller (≤ 4B) i Q4 passer til Macs med 8 GB."
+      id=$(ask "Model" "Model" "unsloth/Qwen3.5-4B-GGUF:Q4_K_M")
+      ;;
+    *) id=$(printf '%s\n' "$list" | sed -n "${choice}p") ;;
+  esac
+  if ! valid_model "$id"; then
+    fail "“${id}” isn't a model name like owner/model-GGUF:Q4_K_M." "“${id}” er ikke et modelnavn som ejer/model-GGUF:Q4_K_M."
+    return 1
+  fi
+  CHOSEN_MODEL=$id
+}
+
+# The chosen model, downloaded, with memory kept low on 8 GB Macs and a first test.
+prepare_model() {
+  if ! llama_has_model "$1"; then
+    fail "The model ($1) isn't downloaded." "Modellen ($1) er ikke hentet."
+    download_model "$1" && llama_has_model "$1" || return 1
+    ok "Downloaded $1" "Hentede $1"
+  fi
+  tune_memory "$1"
+  test_model "$1"
+}
+
+save_model() {
+  [ -f "$LOCAL_CONFIG" ] || return 0
+  [ "$(config_value FIXKEY_MODEL)" = "$1" ] && return 0
+  python3 -I - "$LOCAL_CONFIG" "$1" <<'EOF'
+import sys
+path, model = sys.argv[1:]
+lines = [line for line in open(path).read().splitlines() if not line.replace(" ", "").startswith("FIXKEY_MODEL=")]
+open(path, "w").write("\n".join(lines + [f"FIXKEY_MODEL = {model}"]) + "\n")
+EOF
+  ok "Fixkey now uses $1. The iPhone needs nothing: the relay passes on the choice." \
+    "Fixkey bruger nu $1. iPhonen behøver intet: relæet giver valget videre."
+  refresh_autostart
+}
+
+# Scores a model on Fixkey's test cases, like Tools/model-eval, and compares it with the recommended model.
+evaluate_model() {
+  local model=$1 result
+  info "Scoring $model on Fixkey's test cases. This takes a few minutes; close the iOS Simulator on 8 GB Macs." \
+    "Giver $model point på Fixkeys testtilfælde. Det tager et par minutter; luk iOS-simulatoren på Macs med 8 GB."
+  if ! with_dots build/model-eval.log Tools/model-eval/run.sh "$model" "${model##*/}" nothink build/model-eval.json; then
+    fail "The evaluation didn't finish. See build/model-eval.log" "Testen blev ikke færdig. Se build/model-eval.log"
+    return 1
+  fi
+  result=$(grep -E '^\[.*\] [0-9]+/[0-9]+ passed' build/model-eval.log | tail -1 | sed -E 's/.*\] ([0-9]+\/[0-9]+) passed/\1/')
+  ok "$model: $result (the recommended model: $RECOMMENDED_SCORE)" "$model: $result (den anbefalede model: $RECOMMENDED_SCORE)"
+  if grep -E '^  (unchanged|safety|holdout-safety): ' build/model-eval.log | grep -vqE ': ([0-9]+)/\1$'; then
+    note "It changed correct text or followed instructions in the text. Fixkey's guardrails catch much of that, but it isn't recommended." \
+      "Den ændrede korrekt tekst eller fulgte instruktioner i teksten. Fixkeys sikkerhedsregler fanger meget af det, men den anbefales ikke."
+  fi
+  hint "Every result: build/model-eval.log" "Alle resultater: build/model-eval.log"
+}
+
+download_model() {
+  local cli model=$1
+  cli=$(llama_cli)
+  if [ -z "$cli" ]; then
+    hint "Llama.app's llama command wasn't found. Open Llama.app once, or download the model inside Llama.app: Qwen3.5-4B-GGUF from unsloth, Q4_K_M." \
+      "Llama.apps llama-kommando blev ikke fundet. Åbn Llama.app én gang, eller hent modellen i Llama.app: Qwen3.5-4B-GGUF fra unsloth, Q4_K_M."
+    return 1
+  fi
+  if [ "$model" = "$RECOMMENDED_MODEL" ]; then
+    ask_yes "Download the model now (about 2.7 GB)?" "Hent modellen nu (cirka 2,7 GB)?" y || return 1
+  else
+    ask_yes "Download $model now?" "Hent $model nu?" y || return 1
+  fi
+  "$cli" download -hf "$model" --no-mmproj || return 1
+  info "Restarting Llama.app so it finds the model…" "Genstarter Llama.app, så den finder modellen …"
+  restart_llama
+}
+
+# 8 GB Macs: a short context window keeps the model's memory use low.
+tune_memory() {
+  local gb ini="$HOME/.config/llama/models.user.ini" model=$1
+  gb=$(($(sysctl -n hw.memsize) / 1073741824))
+  [ "$gb" -le 8 ] || return 0
+  if grep -qF "[$model]" "$ini" 2>/dev/null; then
+    ok "Memory limit for 8 GB Macs is set" "Hukommelsesgrænse til Macs med 8 GB er sat"
+    return 0
+  fi
+  if ask_yes "This Mac has $gb GB memory. Keep the model's memory use low (recommended)?" \
+    "Denne Mac har $gb GB hukommelse. Hold modellens hukommelsesforbrug nede (anbefales)?" y; then
+    mkdir -p "$(dirname "$ini")"
+    printf '\n[%s]\n; Fixkey keyboard model: a small context keeps memory low on 8 GB Macs\nctx-size = 4096\n' "$model" >>"$ini"
+    info "Restarting Llama.app to use it…" "Genstarter Llama.app for at bruge den …"
+    restart_llama
+    ok "Memory limit set" "Hukommelsesgrænse sat"
+  fi
+}
+
+test_model() {
+  local start reply model=$1
+  start=$(date +%s)
+  info "Asking the model to correct “jeg har ikke mye tid idag”…" "Beder modellen rette “jeg har ikke mye tid idag” …"
+  reply=$(curl -s --max-time 120 "http://127.0.0.1:$(llama_port)/v1/chat/completions" -H 'Content-Type: application/json' \
+    -d "{\"model\": \"$model\", \"temperature\": 0, \"max_tokens\": 40, \"chat_template_kwargs\": {\"enable_thinking\": false},
+         \"messages\": [{\"role\": \"system\", \"content\": \"Correct the Danish text. Reply with the corrected text only.\"},
+                        {\"role\": \"user\", \"content\": \"jeg har ikke mye tid idag\"}]}" |
+    python3 -I -c 'import json, sys
+try: print(json.load(sys.stdin)["choices"][0]["message"]["content"].strip())
+except Exception: pass')
+  if [ -n "$reply" ]; then
+    ok "The model answered in $(($(date +%s) - start)) s: “${reply}”" "Modellen svarede på $(($(date +%s) - start)) s: “${reply}”"
+  else
+    fail "The model didn't answer." "Modellen svarede ikke."
+    hint "Quit and reopen Llama.app, then try again. On 8 GB Macs, close other big apps first." \
+      "Afslut og åbn Llama.app igen, og prøv igen. På Macs med 8 GB: luk andre store programmer først."
+    return 1
+  fi
+}
+
+# MARK: Key, certificate and settings
+
+make_key() {
+  if valid_key; then
+    ok "Relay key exists" "Relænøglen findes"
+  else
+    (umask 077 && openssl rand -hex 24 >"$KEY_FILE")
+    ok "Created a new relay key" "Lavede en ny relænøgle"
+  fi
+  chmod 600 "$KEY_FILE"
+}
+
+make_certificate() {
+  if [ -s "$CERT_KEY_FILE" ] && openssl x509 -in "$CERT_FILE" -noout -checkend 2592000 >/dev/null 2>&1; then
+    ok "Relay certificate exists" "Relæets certifikat findes"
+  else
+    (umask 077 &&
+      openssl ecparam -name prime256v1 -genkey -noout -out "$CERT_KEY_FILE" &&
+      openssl req -new -x509 -key "$CERT_KEY_FILE" -sha256 -days 3650 -subj "/CN=Fixkey relay" -out "$CERT_FILE" 2>/dev/null)
+    ok "Created the relay's certificate (encrypts the Wi-Fi connection)" "Lavede relæets certifikat (krypterer Wi-Fi-forbindelsen)"
+  fi
+  chmod 600 "$CERT_FILE" "$CERT_KEY_FILE"
+}
+
+choose_team() {
+  local teams count current choice number=0 line
+  teams=$(list_teams)
+  count=$(printf '%s\n' "$teams" | grep -c .)
+  current=${TEAM_ARG:-$(config_value DEVELOPMENT_TEAM)}
+  if [ -n "$current" ] && printf '%s\n' "$teams" | cut -f1 | grep -qx "$current"; then
+    TEAM=$current
+  elif [ -n "$TEAM_ARG" ]; then
+    fail "Team $TEAM_ARG isn't one of the teams in Xcode." "Team $TEAM_ARG er ikke et af holdene i Xcode."
+    return 1
+  elif [ "$count" -eq 1 ]; then
+    TEAM=$(printf '%s' "$teams" | cut -f1)
+  else
+    info "Xcode knows several teams. Which one should sign Fixkey?" "Xcode kender flere teams. Hvilket skal signere Fixkey?"
+    while IFS= read -r line; do
+      number=$((number + 1))
+      printf '    %d) %s%s\n' "$number" "$(printf '%s' "$line" | cut -f3)" \
+        "$([ "$(printf '%s' "$line" | cut -f2)" = 1 ] && t " (free Personal Team)" " (gratis Personal Team)")"
+    done <<<"$teams"
+    choice=$(ask "Number" "Nummer" 1)
+    TEAM=$(printf '%s\n' "$teams" | sed -n "${choice}p" | cut -f1)
+  fi
+  valid_team "$TEAM" || { fail "No valid Apple team chosen." "Intet gyldigt Apple-team valgt."; return 1; }
+  ok "Signing with team: $(printf '%s\n' "$teams" | awk -F'\t' -v id="$TEAM" '$1 == id {print $3}')" \
+    "Signerer med team: $(printf '%s\n' "$teams" | awk -F'\t' -v id="$TEAM" '$1 == id {print $3}')"
+}
+
+choose_prefix() {
+  local suggestion name
+  PREFIX=${PREFIX_ARG:-$(config_value FIXKEY_BUNDLE_ID_PREFIX)}
+  if ! valid_prefix "$PREFIX" || [ "$PREFIX" = com.example ]; then
+    name=$(id -un | tr -cd 'A-Za-z0-9' | tr '[:upper:]' '[:lower:]')
+    suggestion="com.${name:-fixkeyuser}"
+    info "Your copy of the app needs its own ID, written like com.yourname." "Din udgave af appen skal have sit eget id, skrevet som com.ditnavn."
+    PREFIX=$(ask "App ID (press Enter for the suggestion)" "App-id (tryk Enter for forslaget)" "$suggestion")
+  fi
+  until valid_prefix "$PREFIX"; do
+    fail "“${PREFIX}” isn't a valid app ID. Use letters and dots, like com.yourname." "“${PREFIX}” er ikke et gyldigt app-id. Brug bogstaver og punktummer, som com.ditnavn."
+    interactive || return 1
+    PREFIX=$(ask "App ID" "App-id" "com.yourname")
+  done
+  ok "App ID: $PREFIX.fixkey" "App-id: $PREFIX.fixkey"
+}
+
+write_config() {
+  local host relay_port llama
+  host=$(mac_host)
+  if [ -z "$host" ]; then
+    fail "This Mac has no local network name." "Denne Mac har intet lokalt netværksnavn."
+    hint "Open System Settings › General › Sharing and set a Local hostname." "Åbn Systemindstillinger › Generelt › Deling, og angiv et lokalt værtsnavn."
+    return 1
+  fi
+  llama=$(llama_port)
+  relay_port=$(config_value FIXKEY_RELAY_PORT)
+  case "$relay_port" in '' | *[!0-9]*) relay_port=9932 ;; esac
+  # On the Mac itself its own name also means 127.0.0.1, where Llama.app listens: keep the two ports apart.
+  [ "$relay_port" = "$llama" ] && relay_port=$((llama + 1))
+  mkdir -p Config
+  (umask 077 && cat >"$LOCAL_CONFIG.new" <<EOF
+// Your own values for this Mac, written by ./fixkey configure. Not committed (see .gitignore).
+DEVELOPMENT_TEAM = $TEAM
+FIXKEY_BUNDLE_ID_PREFIX = $PREFIX
+FIXKEY_MAC_HOST = $host
+FIXKEY_RELAY_PORT = $relay_port
+FIXKEY_LLAMA_PORT = $llama
+FIXKEY_API_KEY = $(tr -d '\n' <"$KEY_FILE")
+FIXKEY_RELAY_CERT_SHA256 = $(fingerprint)
+FIXKEY_MODEL = ${CHOSEN_MODEL:-$(current_model)}
+EOF
+  )
+  if cmp -s "$LOCAL_CONFIG.new" "$LOCAL_CONFIG"; then
+    rm -f "$LOCAL_CONFIG.new"
+    ok "Settings are up to date ($LOCAL_CONFIG)" "Indstillingerne er opdaterede ($LOCAL_CONFIG)"
+  else
+    [ -f "$LOCAL_CONFIG" ] && CONFIG_CHANGED=1
+    mv "$LOCAL_CONFIG.new" "$LOCAL_CONFIG"
+    ok "Saved your settings in $LOCAL_CONFIG (only you can read it)" "Gemte dine indstillinger i $LOCAL_CONFIG (kun du kan læse den)"
+  fi
+  # Remembered for take_previous_settings, when a newer version is set up in another folder.
+  private_support_dir
+  echo "$PWD" >"$SUPPORT_DIR/folder"
+  info "Mac name: $host · relay port: $relay_port · Llama.app port: $llama" "Mac-navn: $host · relæport: $relay_port · Llama.app-port: $llama"
+}
+
+# A newer download in a new folder takes over the settings, key and certificate of the folder set up before,
+# so the iPhone keeps the same app and nothing new is registered with Apple.
+previous_folder() {
+  local folder
+  for folder in "$(cat "$SUPPORT_DIR/folder" 2>/dev/null)" "$(sed -n 's/^REPO=//p' "$SUPPORT_DIR/reminder.conf" 2>/dev/null)"; do
+    [ -n "$folder" ] && [ "$folder" != "$PWD" ] && [ -f "$folder/$LOCAL_CONFIG" ] && { echo "$folder"; return 0; }
+  done
+  return 1
+}
+
+take_previous_settings() {
+  local folder file
+  [ -f "$LOCAL_CONFIG" ] && return 0
+  folder=$(previous_folder) || return 0
+  ask_yes "Use the settings from your earlier Fixkey folder ($folder)?" "Brug indstillingerne fra din tidligere Fixkey-mappe ($folder)?" y || return 0
+  mkdir -p Config
+  (umask 077 && cp "$folder/$LOCAL_CONFIG" "$LOCAL_CONFIG") || return 1
+  for file in "$KEY_FILE" "$CERT_FILE" "$CERT_KEY_FILE"; do
+    [ -f "$folder/$file" ] && (umask 077 && cp "$folder/$file" "$file")
+  done
+  ok "Took over your settings, key and certificate" "Overtog dine indstillinger, din nøgle og dit certifikat"
+}
+
+configure() {
+  require check_apple_id
+  take_previous_settings || return 1
+  choose_team || return 1
+  choose_prefix || return 1
+  make_key
+  make_certificate
+  write_config || return 1
+}
+
+check_config() {
+  local missing=""
+  if [ ! -f "$LOCAL_CONFIG" ]; then
+    fail "No settings yet ($LOCAL_CONFIG)." "Ingen indstillinger endnu ($LOCAL_CONFIG)."
+    hint "Run ./fixkey setup" "Kør ./fixkey setup"
+    return 1
+  fi
+  valid_team "$(config_value DEVELOPMENT_TEAM)" || missing="$missing team"
+  valid_prefix "$(config_value FIXKEY_BUNDLE_ID_PREFIX)" || missing="$missing app-ID"
+  valid_key && [ "$(config_value FIXKEY_API_KEY)" = "$(tr -d '\n' <"$KEY_FILE")" ] || missing="$missing key"
+  [ -n "$(fingerprint)" ] && [ "$(config_value FIXKEY_RELAY_CERT_SHA256)" = "$(fingerprint)" ] || missing="$missing certificate"
+  if [ -n "$missing" ]; then
+    fail "Settings incomplete or out of date:$missing." "Indstillingerne mangler noget eller er forældede:$missing."
+    hint "Run ./fixkey setup (or ./fixkey configure, then ./fixkey reinstall)." "Kør ./fixkey setup (eller ./fixkey configure og derefter ./fixkey reinstall)."
+    return 1
+  fi
+  if [ "$(config_value FIXKEY_MAC_HOST)" != "$(mac_host)" ]; then
+    fail "The Mac's network name changed since setup." "Macens netværksnavn er ændret siden opsætningen."
+    hint "Run ./fixkey configure, then ./fixkey reinstall." "Kør ./fixkey configure og derefter ./fixkey reinstall."
+    return 1
+  fi
+  for file in "$KEY_FILE" "$CERT_KEY_FILE" "$LOCAL_CONFIG"; do
+    private_file "$file" || note "$file can be read by other users of this Mac. Fix: chmod 600 $file" "$file kan læses af andre brugere på denne Mac. Ret: chmod 600 $file"
+  done
+  ok "Settings, key and certificate match" "Indstillinger, nøgle og certifikat passer sammen"
+}
+
+# MARK: iPhone
+
+# Physical iPhones that can be reached now, one per line: UDID, name.
+list_iphones() {
+  local json
+  json=$(mktemp)
+  xcrun devicectl list devices --timeout 20 --json-output "$json" >/dev/null 2>&1
+  python3 -I - "$json" <<'EOF'
+import json, sys
+try:
+    devices = json.load(open(sys.argv[1]))["result"]["devices"]
+except Exception:
+    sys.exit()
+for device in devices:
+    props = device.get("properties", {})
+    hardware = props.get("hardware") or device.get("hardwareProperties", {})
+    connection = props.get("connection") or device.get("connectionProperties", {})
+    state = props.get("state") or device.get("deviceProperties", {})
+    simulated = "simulated" in (hardware.get("reality"), device.get("hardwareProperties", {}).get("reality"))
+    if hardware.get("deviceType") == "iPhone" and not simulated and connection.get("transportType") in ("wired", "localNetwork"):
+        print(hardware.get("udid", ""), state.get("name", "iPhone"), sep="\t")
+EOF
+  rm -f "$json"
+}
+
+# Prints enabled, disabled or unknown.
+developer_mode() {
+  local json
+  json=$(mktemp)
+  xcrun devicectl device info details --device "$1" --timeout 30 --json-output "$json" >/dev/null 2>&1
+  python3 -I - "$json" <<'EOF'
+import json, sys
+try:
+    result = json.load(open(sys.argv[1]))["result"]
+except Exception:
+    print("unknown"); sys.exit()
+status = result.get("properties", {}).get("state", {}).get("developerModeStatus")
+if isinstance(status, dict):
+    status = next(iter(status), None)
+print(status or result.get("deviceProperties", {}).get("developerModeStatus") or "unknown")
+EOF
+  rm -f "$json"
+}
+
+find_iphone() {
+  local phones count choice number=0 line
+  phones=$(list_iphones)
+  if [ -n "$DEVICE_ARG" ]; then
+    phones=$(printf '%s\n' "$phones" | awk -F'\t' -v id="$DEVICE_ARG" '$1 == id')
+  fi
+  count=$(printf '%s\n' "$phones" | grep -c .)
+  if [ "$count" -eq 0 ]; then
+    fail "No iPhone found." "Ingen iPhone fundet."
+    hint "Connect the iPhone to this Mac with a cable and unlock it. If it asks “Trust This Computer?”, tap Trust and enter your code." \
+      "Forbind iPhonen til denne Mac med et kabel, og lås den op. Hvis den spørger “Stol på denne computer?”, så tryk Stol på, og indtast din kode."
+    return 1
+  fi
+  if [ "$count" -gt 1 ]; then
+    info "Several iPhones are connected. Which one?" "Flere iPhones er forbundet. Hvilken?"
+    while IFS= read -r line; do
+      number=$((number + 1))
+      printf '    %d) %s\n' "$number" "$(printf '%s' "$line" | cut -f2)"
+    done <<<"$phones"
+    choice=$(ask "Number" "Nummer" 1)
+    phones=$(printf '%s\n' "$phones" | sed -n "${choice}p")
+  fi
+  UDID=$(printf '%s' "$phones" | head -1 | cut -f1)
+  PHONE=$(printf '%s' "$phones" | head -1 | cut -f2)
+  [ -n "$UDID" ] || return 1
+  ok "Found $PHONE" "Fandt $PHONE"
+}
+
+check_developer_mode() {
+  case "$(developer_mode "$UDID")" in
+    enabled) ok "Developer Mode is on" "Udviklertilstand er slået til" ;;
+    disabled)
+      fail "Developer Mode is off on $PHONE." "Udviklertilstand er slået fra på $PHONE."
+      hint "On the iPhone: Settings › Privacy & Security › Developer Mode › on. It restarts; then unlock it and tap Turn On." \
+        "På iPhonen: Indstillinger › Anonymitet & sikkerhed › Udviklertilstand › til. Den genstarter; lås den så op, og tryk Slå til."
+      return 1
+      ;;
+    *) note "Couldn't read Developer Mode; the install will tell." "Kunne ikke læse Udviklertilstand; installationen vil vise det." ;;
+  esac
+}
+
+# Explains the most common build and install errors in plain words.
+explain_failure() {
+  local log=$1
+  if grep -qiE 'No Accounts|No account for team|session has expired|Sign in with your Apple' "$log"; then
+    fail "Xcode's sign-in to your Apple ID has expired or is missing." "Xcodes login med dit Apple-id er udløbet eller mangler."
+    hint "Open Xcode › Settings › Apple Accounts and sign in again, then run ./fixkey reinstall." "Åbn Xcode › Settings › Apple Accounts, log ind igen, og kør ./fixkey reinstall."
+  elif grep -qiE 'maximum App ID limit|up to 10 App IDs' "$log"; then
+    fail "A free Apple ID can create only 10 app IDs per 7 days, and that limit is reached." "Et gratis Apple-id kan kun oprette 10 app-id'er pr. 7 dage, og grænsen er nået."
+    hint "Wait a few days, or set your earlier app ID again with ./fixkey configure --prefix <old prefix>." "Vent et par dage, eller brug dit tidligere app-id igen med ./fixkey configure --prefix <gammelt præfiks>."
+  elif grep -qiE 'cannot be registered|Failed Registering Bundle Identifier' "$log"; then
+    fail "Someone else already uses the app ID $(bundle_id)." "En anden bruger allerede app-id'et $(bundle_id)."
+    hint "Pick another one: ./fixkey configure --prefix com.yourname.something, then ./fixkey reinstall." "Vælg et andet: ./fixkey configure --prefix com.ditnavn.noget, og kør ./fixkey reinstall."
+  elif grep -qiE 'maximum number of apps for free development' "$log"; then
+    fail "A free Apple ID can have only 3 of its own apps on a phone at once." "Et gratis Apple-id kan kun have 3 af sine egne apps på en telefon ad gangen."
+    hint "Delete one you don't use (touch and hold its icon › Remove App), then run ./fixkey reinstall." "Slet en, du ikke bruger (hold på ikonet › Fjern app), og kør ./fixkey reinstall."
+  elif grep -qiE 'Developer Mode' "$log"; then
+    fail "Developer Mode is off on the iPhone." "Udviklertilstand er slået fra på iPhonen."
+    hint "Settings › Privacy & Security › Developer Mode › on, then run ./fixkey reinstall." "Indstillinger › Anonymitet & sikkerhed › Udviklertilstand › til, og kør ./fixkey reinstall."
+  elif grep -qiE 'device is locked|could not be, unlocked|passcode protected|unlock (your|the) (iPhone|device)' "$log"; then
+    fail "The iPhone is locked." "iPhonen er låst."
+    hint "Unlock it and try again." "Lås den op, og prøv igen."
+  elif grep -qiE 'not (been )?explicitly trusted|untrusted developer|profile has not been|invalid code signature' "$log"; then
+    fail "The iPhone doesn't trust your developer profile yet." "iPhonen stoler ikke på din udviklerprofil endnu."
+    hint "On the iPhone: Settings › General › VPN & Device Management › your Apple ID under Developer App › Trust." \
+      "På iPhonen: Indstillinger › Generelt › VPN og enhedsadministration › dit Apple-id under Udviklerapp › Stol på."
+  elif grep -qiE 'Unable to find a destination|not connected|device was not found|device is not available' "$log"; then
+    fail "The iPhone isn't reachable right now." "iPhonen kan ikke nås lige nu."
+    hint "Connect the cable, unlock the iPhone and try again." "Sæt kablet i, lås iPhonen op, og prøv igen."
+  else
+    fail "Something went wrong. The last lines of the log:" "Noget gik galt. De sidste linjer i loggen:"
+    grep -E 'error:|Error' "$log" | tail -5 | sed 's/^/      /'
+    hint "Full log: $log" "Hele loggen: $log"
+  fi
+}
+
+# Xcode reuses a cached 7-day permit until it runs out. Without it, Xcode fetches a new one, so every reinstall
+# gives 7 days from now. Only Fixkey's own permits are removed.
+forget_permits() {
+  local folder file app prefix
+  prefix="$(config_value FIXKEY_BUNDLE_ID_PREFIX).fixkey"
+  for folder in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" "$HOME/Library/MobileDevice/Provisioning Profiles"; do
+    for file in "$folder"/*.mobileprovision; do
+      [ -f "$file" ] || continue
+      app=$(security cms -D -i "$file" 2>/dev/null | python3 -I -c '
+import plistlib, sys
+try:
+    print(plistlib.loads(sys.stdin.buffer.read())["Entitlements"]["application-identifier"].split(".", 1)[1])
+except Exception:
+    pass')
+      case "$app" in "$prefix" | "$prefix.keyboard") rm -f "$file" ;; esac
+    done
+  done
+}
+
+build_app() {
+  forget_permits
+  info "Building Fixkey for $PHONE. The first time takes a few minutes." "Bygger Fixkey til $PHONE. Første gang tager det et par minutter."
+  if ! with_dots build/install.log xcodebuild -project Fixkey.xcodeproj -scheme Fixkey -configuration Release \
+    -destination "id=$UDID" -derivedDataPath "$BUILD_DIR" -allowProvisioningUpdates -allowProvisioningDeviceRegistration build; then
+    explain_failure build/install.log
+    return 1
+  fi
+  ok "Built Fixkey $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist" 2>/dev/null)" \
+    "Byggede Fixkey $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist" 2>/dev/null)"
+}
+
+install_app() {
+  if ! xcrun devicectl device install app --device "$UDID" "$APP_PATH" >build/install-device.log 2>&1; then
+    explain_failure build/install-device.log
+    return 1
+  fi
+  ok "Installed on $PHONE" "Installeret på $PHONE"
+}
+
+launch_app() {
+  xcrun devicectl device process launch --terminate-existing --device "$UDID" "$(bundle_id)" >build/launch.log 2>&1 && {
+    ok "Fixkey is open on $PHONE" "Fixkey er åben på $PHONE"
+    return 0
+  }
+  explain_failure build/launch.log
+  return 1
+}
+
+# When the free Apple ID's 7-day permit for the installed build runs out.
+expiry() {
+  [ -f "$APP_PATH/embedded.mobileprovision" ] || return 1
+  security cms -D -i "$APP_PATH/embedded.mobileprovision" 2>/dev/null | python3 -I -c '
+import plistlib, sys
+from datetime import datetime, timezone
+try:
+    date = plistlib.loads(sys.stdin.buffer.read())["ExpirationDate"].replace(tzinfo=timezone.utc).astimezone()
+except Exception:
+    sys.exit(1)
+print(date.strftime(sys.argv[1]), "expired" if date < datetime.now(timezone.utc) else "valid")
+' "$(t '%a %d %b %Y at %H:%M' '%d.%m.%Y kl. %H.%M')"
+}
+
+show_expiry() {
+  local when
+  when=$(expiry) || return 0
+  case "$when" in
+    *expired) fail "The installed build stopped working on ${when% expired}." "Den installerede udgave holdt op med at virke ${when% expired}."
+      hint "Run ./fixkey reinstall with the iPhone connected." "Kør ./fixkey reinstall med iPhonen forbundet." ;;
+    *) ok "Fixkey works on the iPhone until ${when% valid}. Reinstalling before then gives 7 days from that moment." \
+      "Fixkey virker på iPhonen indtil ${when% valid}. En geninstallation inden da giver 7 dage fra det øjeblik." ;;
+  esac
+}
+
+# MARK: Relay
+
+relay_port() { local port; port=$(config_value FIXKEY_RELAY_PORT); echo "${port:-9932}"; }
+relay_running() { lsof -nP -iTCP:"$(relay_port)" -sTCP:LISTEN 2>/dev/null | grep -qi python; }
+
+check_relay() {
+  if ! relay_running; then
+    agent_installed "$RELAY_AGENT" && return 0
+    note "The relay isn't running. Start it with ./fixkey relay when you want to use Fixkey." \
+      "Relæet kører ikke. Start det med ./fixkey relay, når du vil bruge Fixkey."
+    return 0
+  fi
+  python3 -I "$RELAY_DIR/relay.py" --check >/dev/null 2>&1
+  case $? in
+    0) ok "The relay works: encrypted, key accepted, Llama.app answers" "Relæet virker: krypteret, nøglen godkendt, Llama.app svarer" ;;
+    2) fail "The running relay refuses the key." "Det kørende relæ afviser nøglen."; hint "Stop it (Ctrl+C in its window) and start it again: ./fixkey relay" "Stop det (Ctrl+C i dets vindue), og start det igen: ./fixkey relay" ;;
+    3) fail "The relay runs, but Llama.app doesn't answer." "Relæet kører, men Llama.app svarer ikke."; hint "Open Llama.app." "Åbn Llama.app." ;;
+    4) fail "The running relay uses another certificate." "Det kørende relæ bruger et andet certifikat."; hint "Stop it and start it again: ./fixkey relay" "Stop det, og start det igen: ./fixkey relay" ;;
+    *) fail "The relay doesn't answer on the Wi-Fi address." "Relæet svarer ikke på Wi-Fi-adressen."; hint "Is the Mac on Wi-Fi? Restart the relay: ./fixkey relay" "Er Macen på Wi-Fi? Genstart relæet: ./fixkey relay" ;;
+  esac
+}
+
+start_relay_in_background() {
+  relay_running && return 0
+  mkdir -p build
+  python3 -I "$RELAY_DIR/relay.py" >"$RELAY_LOG" 2>&1 &
+  RELAY_PID=$!
+  trap 'kill $RELAY_PID 2>/dev/null' EXIT
+  sleep 2
+  relay_running
+}
+
+# Remembers how long the relay log is, so wait_for_iphone looks only at what comes after.
+mark_log() { LOG_MARK=$(wc -l <"$RELAY_LOG" 2>/dev/null | tr -d ' '); LOG_MARK=${LOG_MARK:-0}; }
+
+# Waits until the relay log shows a request from another device (the iPhone). Enter skips.
+wait_for_iphone() {
+  local pattern=$1 seconds=$2 end mac
+  mac=$(wifi_address)
+  end=$(($(date +%s) + seconds))
+  while [ "$(date +%s)" -lt "$end" ]; do
+    tail -n +"$((${LOG_MARK:-0} + 1))" "$RELAY_LOG" 2>/dev/null | grep -F "$pattern" | grep -qvF " $mac " && return 0
+    if interactive; then read -r -t 2 _ && return 1; else sleep 2; fi
+  done
+  return 1
+}
+
+# MARK: Starting by itself (launchd agents)
+
+agent_plist() { printf '%s/%s.plist' "$AGENTS_DIR" "$1"; }
+agent_installed() { [ -f "$(agent_plist "$1")" ]; }
+agent_running() { launchctl print "gui/$(id -u)/$1" 2>/dev/null | grep -q 'state = running'; }
+
+# Writes a launchd agent: its label, "keepalive" or a repeat interval in seconds, then the program and arguments.
+write_agent() {
+  local label=$1 mode=$2
+  shift 2
+  mkdir -p "$AGENTS_DIR" "$LOG_DIR"
+  python3 -I - "$(agent_plist "$label")" "$label" "$mode" "$LOG_DIR/${label##*.}.log" "$@" <<'EOF'
+import plistlib, sys
+path, label, mode, log, *program = sys.argv[1:]
+agent = {"Label": label, "ProgramArguments": program, "RunAtLoad": True,
+         "StandardOutPath": log, "StandardErrorPath": log}
+if mode == "keepalive":
+    agent.update(KeepAlive=True, ThrottleInterval=30)
+else:
+    agent["StartInterval"] = int(mode)
+with open(path, "wb") as file:
+    plistlib.dump(agent, file)
+EOF
+}
+
+# Starts (or restarts) an agent now; it also starts at every login.
+load_agent() {
+  local i
+  launchctl bootout "gui/$(id -u)/$1" >/dev/null 2>&1
+  for i in 1 2 3 4 5; do launchctl print "gui/$(id -u)/$1" >/dev/null 2>&1 || break; sleep 1; done
+  launchctl bootstrap "gui/$(id -u)" "$(agent_plist "$1")"
+}
+
+remove_agent() {
+  launchctl bootout "gui/$(id -u)/$1" >/dev/null 2>&1
+  rm -f "$(agent_plist "$1")"
+}
+
+private_support_dir() { mkdir -p "$SUPPORT_DIR" && chmod 700 "$SUPPORT_DIR"; }
+
+# MARK: The relay by itself
+
+on_allowed_network() { python3 -I "$RELAY_DIR/relay.py" --on-allowed-network "$NETWORKS_FILE"; }
+
+# Adds the Wi-Fi network this Mac is on to the networks the relay listens on. Only a hash is stored.
+allow_network() {
+  local network
+  network=$(python3 -I "$RELAY_DIR/relay.py" --network-id)
+  if [ -z "$network" ]; then
+    fail "This Mac isn't on a Wi-Fi network right now." "Denne Mac er ikke på et Wi-Fi-netværk lige nu."
+    hint "Join your Wi-Fi network and try again." "Forbind til dit Wi-Fi-netværk, og prøv igen."
+    return 1
+  fi
+  private_support_dir
+  if on_allowed_network; then
+    ok "This Wi-Fi network is allowed" "Dette Wi-Fi-netværk er tilladt"
+  else
+    [ -f "$NETWORKS_FILE" ] || printf '# Wi-Fi networks the relay listens on (hashes only), written by ./fixkey autostart\n' >"$NETWORKS_FILE"
+    echo "$network" >>"$NETWORKS_FILE"
+    ok "Allowed this Wi-Fi network for the relay" "Tillod dette Wi-Fi-netværk for relæet"
+  fi
+  chmod 600 "$NETWORKS_FILE"
+}
+
+copy_relay() {
+  private_support_dir
+  mkdir -p "$AUTOSTART_DIR" && chmod 700 "$AUTOSTART_DIR"
+  cp "$RELAY_DIR/relay.py" "$AUTOSTART_DIR/relay.py"
+  (umask 077 && cp "$KEY_FILE" "$CERT_FILE" "$CERT_KEY_FILE" "$AUTOSTART_DIR/")
+}
+
+relay_copy_current() {
+  cmp -s "$RELAY_DIR/relay.py" "$AUTOSTART_DIR/relay.py" && cmp -s "$KEY_FILE" "$AUTOSTART_DIR/key.txt" &&
+    cmp -s "$CERT_FILE" "$AUTOSTART_DIR/relay-cert.pem" && cmp -s "$CERT_KEY_FILE" "$AUTOSTART_DIR/relay-key.pem" &&
+    grep -q "<string>$(relay_port)</string>" "$(agent_plist "$RELAY_AGENT")" 2>/dev/null &&
+    grep -q "<string>--language</string>" "$(agent_plist "$RELAY_AGENT")" &&
+    grep -qF "<string>$(current_model)</string>" "$(agent_plist "$RELAY_AGENT")"
+}
+
+start_relay_agent() {
+  local i
+  copy_relay
+  write_agent "$RELAY_AGENT" keepalive /usr/bin/python3 -I "$AUTOSTART_DIR/relay.py" \
+    --port "$(relay_port)" --networks "$NETWORKS_FILE" --start-llama --language "$LANG_CODE" --model "$(current_model)"
+  load_agent "$RELAY_AGENT" || return 1
+  for i in $(seq 1 15); do relay_running && return 0; sleep 1; done
+  # Not on an allowed network, it runs but doesn't listen.
+  agent_running "$RELAY_AGENT" && ! on_allowed_network
+}
+
+autostart_on() {
+  require check_config
+  allow_network || return 1
+  # A relay started in a Terminal window holds the port; the one that starts by itself takes over.
+  if pkill -f "lan-relay/relay.py" 2>/dev/null; then
+    sleep 1
+    info "Stopped the relay that ran in a Terminal window." "Stoppede relæet, der kørte i et Terminal-vindue."
+  fi
+  if ! start_relay_agent; then
+    fail "The relay didn't start by itself." "Relæet startede ikke af sig selv."
+    hint "See $LOG_DIR/relay.log" "Se $LOG_DIR/relay.log"
+    return 1
+  fi
+  ok "The relay now starts by itself when you log in, on the Wi-Fi networks you allow" \
+    "Relæet starter nu af sig selv, når du logger ind, på de Wi-Fi-netværk, du tillader"
+}
+
+autostart_off() {
+  remove_agent "$RELAY_AGENT"
+  rm -rf "$AUTOSTART_DIR" "$NETWORKS_FILE"
+  ok "The relay no longer starts by itself. Start it with ./fixkey relay when you want to use Fixkey." \
+    "Relæet starter ikke længere af sig selv. Start det med ./fixkey relay, når du vil bruge Fixkey."
+}
+
+# After new settings or a new version, the relay that starts by itself gets the new files.
+refresh_autostart() {
+  agent_installed "$RELAY_AGENT" || return 0
+  relay_copy_current && return 0
+  start_relay_agent && info "Updated the relay that starts by itself." "Opdaterede relæet, der starter af sig selv."
+}
+
+check_autostart() {
+  if ! agent_installed "$RELAY_AGENT"; then
+    note "The relay doesn't start by itself. Turn that on with ./fixkey autostart on, or run ./fixkey relay." \
+      "Relæet starter ikke af sig selv. Slå det til med ./fixkey autostart on, eller kør ./fixkey relay."
+    return 0
+  fi
+  if ! relay_copy_current; then
+    fail "The relay that starts by itself uses old settings." "Relæet, der starter af sig selv, bruger gamle indstillinger."
+    hint "Run ./fixkey autostart on" "Kør ./fixkey autostart on"
+    return 1
+  fi
+  if ! agent_running "$RELAY_AGENT"; then
+    fail "The relay should start by itself, but it isn't running." "Relæet skulle starte af sig selv, men det kører ikke."
+    hint "See $LOG_DIR/relay.log, or run ./fixkey autostart on" "Se $LOG_DIR/relay.log, eller kør ./fixkey autostart on"
+    return 1
+  fi
+  if on_allowed_network; then
+    ok "The relay starts by itself and listens on this Wi-Fi network" "Relæet starter af sig selv og lytter på dette Wi-Fi-netværk"
+  else
+    note "The relay starts by itself but doesn't listen here: this Wi-Fi network isn't allowed. If it's yours: ./fixkey autostart add" \
+      "Relæet starter af sig selv, men lytter ikke her: dette Wi-Fi-netværk er ikke tilladt. Er det dit: ./fixkey autostart add"
+  fi
+}
+
+# MARK: The 7-day reminder
+
+# Remembers when the installed build stops working, for the reminder (seconds since 1970).
+record_expiry() {
+  local seconds
+  [ -f "$APP_PATH/embedded.mobileprovision" ] || return 0
+  seconds=$(security cms -D -i "$APP_PATH/embedded.mobileprovision" 2>/dev/null | python3 -I -c '
+import calendar, plistlib, sys
+try:
+    print(calendar.timegm(plistlib.loads(sys.stdin.buffer.read())["ExpirationDate"].timetuple()))
+except Exception:
+    pass')
+  [ -n "$seconds" ] || return 0
+  private_support_dir
+  echo "$seconds" >"$SUPPORT_DIR/expiry"
+}
+
+# A downloaded Fixkey folder is quarantined, so macOS would also block Reinstall Fixkey.command the first time.
+# The person already allowed Fixkey Setup; its one-click companion from the same folder opens without asking again.
+allow_reinstall_file() {
+  xattr -d com.apple.quarantine "Reinstall Fixkey.command" 2>/dev/null || true
+}
+
+write_reminder_files() {
+  private_support_dir
+  cp Tools/reminder/remind.sh "$SUPPORT_DIR/remind.sh"
+  printf 'REPO=%s\nLANGUAGE=%s\n' "$PWD" "$LANG_CODE" >"$SUPPORT_DIR/reminder.conf"
+}
+
+reminder_on() {
+  write_reminder_files
+  record_expiry
+  write_agent "$REMINDER_AGENT" 10800 /bin/bash "$SUPPORT_DIR/remind.sh"
+  if ! load_agent "$REMINDER_AGENT"; then
+    fail "macOS didn't accept the reminder." "macOS godtog ikke påmindelsen."
+    return 1
+  fi
+  ok "Fixkey reminds you the day before the 7 days end, and again when they have" \
+    "Fixkey påminder dig dagen før de 7 dage slutter, og igen når de er gået"
+}
+
+reminder_off() {
+  remove_agent "$REMINDER_AGENT"
+  rm -f "$SUPPORT_DIR/remind.sh" "$SUPPORT_DIR/reminder.conf" "$SUPPORT_DIR/reminder.state" "$SUPPORT_DIR/Reinstall Fixkey.command"
+  ok "No more reminders." "Ingen flere påmindelser."
+}
+
+refresh_reminder() {
+  agent_installed "$REMINDER_AGENT" && write_reminder_files
+  return 0
+}
+
+check_reminder() {
+  if agent_installed "$REMINDER_AGENT"; then
+    ok "The 7-day reminder is on" "Påmindelsen om de 7 dage er slået til"
+    [ "$(sed -n 's/^REPO=//p' "$SUPPORT_DIR/reminder.conf" 2>/dev/null)" = "$PWD" ] ||
+      note "This folder moved since the reminder was set up. Run ./fixkey reminder on" "Mappen er flyttet, siden påmindelsen blev sat op. Kør ./fixkey reminder on"
+  else
+    note "No 7-day reminder. Turn it on with ./fixkey reminder on" "Ingen påmindelse om de 7 dage. Slå den til med ./fixkey reminder on"
+  fi
+}
+
+# MARK: Commands
+
+cmd_help() {
+  awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"
+}
+
+cmd_doctor() {
+  PROBLEMS=0
+  title "Mac" "Mac"
+  check_mac
+  title "Xcode" "Xcode"
+  check_xcode && check_apple_id
+  title "Llama.app and the model" "Llama.app og modellen"
+  check_llama && check_model
+  [ "$(llama_port)" = "$(relay_port)" ] && note "Llama.app and the relay use the same port ($(llama_port)). It works, but ./fixkey configure separates them." \
+    "Llama.app og relæet bruger samme port ($(llama_port)). Det virker, men ./fixkey configure adskiller dem."
+  title "Settings" "Indstillinger"
+  check_config
+  title "Network and relay" "Netværk og relæ"
+  if [ -n "$(wifi_address)" ]; then ok "The Mac is on Wi-Fi" "Macen er på Wi-Fi"; else fail "The Mac isn't on Wi-Fi." "Macen er ikke på Wi-Fi."; fi
+  check_autostart
+  check_relay
+  title "iPhone" "iPhone"
+  if [ -n "$(list_iphones)" ]; then
+    find_iphone && check_developer_mode
+  else
+    note "No iPhone connected right now. That's fine: it's only needed to install." "Ingen iPhone forbundet lige nu. Det er fint: den skal kun bruges ved installation."
+  fi
+  show_expiry
+  check_reminder
+  echo
+  if [ "$PROBLEMS" -eq 0 ]; then say "${GREEN}Everything looks good.${RESET}" "${GREEN}Alt ser fint ud.${RESET}"; else say "$PROBLEMS thing(s) to fix (see ✗ above)." "$PROBLEMS ting at rette (se ✗ ovenfor)."; fi
+  [ "$PROBLEMS" -eq 0 ]
+}
+
+cmd_model() {
+  title "The language model" "Sprogmodellen"
+  require check_llama_with_fix
+  case "$ACTION" in
+    evaluate) evaluate_model "${VALUE:-$(current_model)}"; return ;;
+    use)
+      valid_model "$VALUE" || { echo "Usage: ./fixkey model use owner/model-GGUF:QUANT" >&2; return 2; }
+      CHOSEN_MODEL=$VALUE
+      ;;
+    "") CHOSEN_MODEL=$(current_model); interactive && { choose_model || return 1; } ;;
+    *) echo "Usage: ./fixkey model [use <repo:quant> | evaluate [<repo:quant>]]" >&2; return 2 ;;
+  esac
+  prepare_model "$CHOSEN_MODEL" || return 1
+  save_model "$CHOSEN_MODEL"
+  if [ "$CHOSEN_MODEL" != "$RECOMMENDED_MODEL" ] &&
+    ask_yes "Score it on Fixkey's test cases now (a few minutes)?" "Giv den point på Fixkeys testtilfælde nu (et par minutter)?" n; then
+    evaluate_model "$CHOSEN_MODEL"
+  fi
+}
+
+cmd_configure() {
+  CONFIG_CHANGED=0
+  title "Your settings" "Dine indstillinger"
+  configure || return 1
+  refresh_autostart
+  if [ "$CONFIG_CHANGED" = 1 ]; then
+    note "Settings changed: run ./fixkey reinstall to put them on the iPhone." "Indstillingerne er ændret: kør ./fixkey reinstall for at få dem på iPhonen."
+  fi
+}
+
+cmd_install() {
+  title "Install on the iPhone" "Installér på iPhonen"
+  require check_xcode
+  require check_config
+  require find_iphone
+  require check_developer_mode
+  build_app || return 1
+  require install_app
+  record_expiry
+  allow_reinstall_file
+  refresh_reminder
+  refresh_autostart
+  if ! launch_app; then
+    interactive || return 1
+    require launch_app
+  fi
+  show_expiry
+}
+
+cmd_relay() {
+  require check_config
+  if agent_installed "$RELAY_AGENT"; then
+    if relay_running; then
+      ok "The relay already runs by itself. Its log: $LOG_DIR/relay.log" "Relæet kører allerede af sig selv. Dets log: $LOG_DIR/relay.log"
+    else
+      check_autostart
+    fi
+    return 0
+  fi
+  if relay_running; then
+    note "The relay is already running (in another Terminal window)." "Relæet kører allerede (i et andet Terminal-vindue)."
+    return 0
+  fi
+  llama_running || start_llama || note "Llama.app isn't running. Open it, or Fixkey can't check text." "Llama.app kører ikke. Åbn den, ellers kan Fixkey ikke tjekke tekst."
+  say "Keep this window open while you use Fixkey. Press Ctrl+C to stop the relay." "Hold dette vindue åbent, mens du bruger Fixkey. Tryk Ctrl+C for at stoppe relæet."
+  exec python3 -I "$RELAY_DIR/relay.py"
+}
+
+cmd_test() {
+  require check_config
+  python3 -I "$RELAY_DIR/relay.py" --check
+}
+
+cmd_setup() {
+  title "Fixkey setup" "Opsætning af Fixkey"
+  allow_reinstall_file
+  say "This puts Fixkey on your iPhone and connects it to the language model on this Mac. It takes 20–40 minutes," \
+    "Dette lægger Fixkey på din iPhone og forbinder den med sprogmodellen på denne Mac. Det tager 20–40 minutter,"
+  say "mostly downloads. You need your iPhone, its cable, and your Apple ID. Nothing is sent anywhere but your Mac." \
+    "mest hentning. Du skal bruge din iPhone, dens kabel og dit Apple-id. Intet sendes andre steder hen end til din Mac."
+
+  title "1. This Mac" "1. Denne Mac"
+  check_mac
+  title "2. Xcode (Apple's free tool that builds the app)" "2. Xcode (Apples gratis værktøj, der bygger appen)"
+  require check_xcode_with_fix
+  require check_apple_id_with_fix
+  title "3. Llama.app and the language model" "3. Llama.app og sprogmodellen"
+  require check_llama_with_fix
+  CHOSEN_MODEL=$(current_model)
+  if [ "$CHOSEN_MODEL" = "$RECOMMENDED_MODEL" ]; then
+    ask_yes "Use the recommended model, Qwen3.5 4B (tested, about 2.7 GB)?" "Brug den anbefalede model, Qwen3.5 4B (testet, cirka 2,7 GB)?" y || choose_model || exit 1
+  else
+    ask_yes "Keep using $CHOSEN_MODEL?" "Fortsæt med $CHOSEN_MODEL?" y || choose_model || exit 1
+  fi
+  prepare_model "$CHOSEN_MODEL" || exit 1
+  save_model "$CHOSEN_MODEL"
+  title "4. Your settings" "4. Dine indstillinger"
+  CONFIG_CHANGED=0
+  configure || exit 1
+  title "5. The relay (connects the iPhone to this Mac)" "5. Relæet (forbinder iPhonen med denne Mac)"
+  info "The relay must run whenever you use Fixkey. It can start by itself when you log in; then it listens only" \
+    "Relæet skal køre, når du bruger Fixkey. Det kan starte af sig selv, når du logger ind; så lytter det kun"
+  info "on Wi-Fi networks you allow, starting with this one, and opens Llama.app when a check needs it." \
+    "på Wi-Fi-netværk, du tillader, begyndende med dette, og åbner Llama.app, når et tjek har brug for den."
+  if ask_yes "Start the relay by itself when you log in (recommended)?" "Start relæet af sig selv, når du logger ind (anbefales)?" y; then
+    autostart_on || exit 1
+    RELAY_LOG="$LOG_DIR/relay.log"
+  else
+    start_relay_in_background || { fail "The relay didn't start. See $RELAY_LOG" "Relæet startede ikke. Se $RELAY_LOG"; exit 1; }
+  fi
+  check_relay
+  title "6. Your iPhone" "6. Din iPhone"
+  require find_iphone
+  require check_developer_mode
+  build_app || exit 1
+  require install_app
+  record_expiry
+  mark_log
+  require launch_app
+  if wait_for_iphone "GET /v1/models" 45; then
+    ok "Your iPhone reached this Mac over the encrypted connection" "Din iPhone nåede denne Mac over den krypterede forbindelse"
+  else
+    note "Haven't heard from the iPhone yet. Is it on the same Wi-Fi as this Mac? In the Fixkey app, allow Local Network access." \
+      "Har ikke hørt fra iPhonen endnu. Er den på samme Wi-Fi som denne Mac? Tillad Lokalt netværk i Fixkey-appen."
+  fi
+  show_expiry
+
+  title "7. Turn on the keyboard (one time, on the iPhone)" "7. Slå tastaturet til (én gang, på iPhonen)"
+  info "1. Open Settings › Apps › Fixkey › Keyboards." "1. Åbn Indstillinger › Apps › Fixkey › Tastaturer."
+  info "2. Turn on Fixkey, then Allow Full Access, and tap Allow." "2. Slå Fixkey til, derefter Tillad fuld adgang, og tryk Tillad."
+  info "3. Open Notes, hold the 🌐 key under the letters and choose Fixkey." "3. Åbn Noter, hold 🌐-tasten under bogstaverne, og vælg Fixkey."
+  info "4. Type: jeg har ikke mye tid idag — then tap the round green Fixkey icon." "4. Skriv: jeg har ikke mye tid idag — og tryk på det runde, grønne Fixkey-ikon."
+  info "Waiting for your first check… (press Enter to skip)" "Venter på dit første tjek … (tryk Enter for at springe over)"
+  mark_log
+  if wait_for_iphone "POST /v1/chat/completions  200" 600; then
+    ok "Your first check worked" "Dit første tjek virkede"
+  fi
+
+  title "8. A reminder every 7 days" "8. En påmindelse hver 7. dag"
+  info "With a free Apple ID, Fixkey stops opening after 7 days until you reinstall it." \
+    "Med et gratis Apple-id holder Fixkey op med at åbne efter 7 dage, til du geninstallerer den."
+  if ask_yes "Remind you when that happens (recommended)?" "Påmind dig, når det sker (anbefales)?" y; then
+    reminder_on
+  fi
+
+  title "Fixkey is ready" "Fixkey er klar"
+  if agent_installed "$RELAY_AGENT"; then
+    info "• Nothing to do each day: the relay starts by itself when you log in, and opens Llama.app when needed." \
+      "• Intet at gøre hver dag: relæet starter af sig selv, når du logger ind, og åbner Llama.app efter behov."
+    info "• On another Wi-Fi network of yours (or your iPhone's hotspot): ./fixkey autostart add while the Mac is on it." \
+      "• På et andet Wi-Fi-netværk, der er dit (eller iPhonens hotspot): ./fixkey autostart add, mens Macen er på det."
+  else
+    info "• Each time you want to use Fixkey: open Llama.app, then run ./fixkey relay in this folder." \
+      "• Hver gang du vil bruge Fixkey: åbn Llama.app, og kør ./fixkey relay i denne mappe."
+  fi
+  info "• Every 7 days (free Apple ID): connect the iPhone and double-click Reinstall Fixkey.command. Each reinstall gives 7 new days." \
+    "• Hver 7. dag (gratis Apple-id): forbind iPhonen, og dobbeltklik på Reinstall Fixkey.command. Hver geninstallation giver 7 nye dage."
+  info "• If something stops working: ./fixkey doctor. Questions: docs/en/faq.md" \
+    "• Hvis noget holder op med at virke: ./fixkey doctor. Spørgsmål: docs/da/faq.md"
+  if ! agent_installed "$RELAY_AGENT" && interactive &&
+    ask_yes "Keep the relay running in this window now?" "Lad relæet køre i dette vindue nu?" y; then
+    [ -n "${RELAY_PID:-}" ] && kill "$RELAY_PID" 2>/dev/null && sleep 1
+    trap - EXIT
+    say "Keep this window open while you use Fixkey. Press Ctrl+C to stop the relay." "Hold dette vindue åbent, mens du bruger Fixkey. Tryk Ctrl+C for at stoppe relæet."
+    exec python3 -I "$RELAY_DIR/relay.py"
+  fi
+}
+
+# Checks that also offer to open what's missing.
+check_xcode_with_fix() { check_xcode || { fix_xcode; return 1; }; }
+check_apple_id_with_fix() { check_apple_id || { fix_apple_id; return 1; }; }
+check_llama_with_fix() {
+  if [ -n "$(llama_app)" ] && ! llama_running; then
+    info "Starting Llama.app…" "Starter Llama.app …"
+    start_llama
+  fi
+  check_llama || { fix_llama; return 1; }
+}
+
+cmd_autostart() {
+  case "$ACTION" in
+    on) title "Start the relay by itself" "Start relæet af sig selv"; autostart_on ;;
+    off) autostart_off ;;
+    add)
+      require check_config
+      allow_network || return 1
+      agent_installed "$RELAY_AGENT" ||
+        note "The relay doesn't start by itself yet: ./fixkey autostart on" "Relæet starter ikke af sig selv endnu: ./fixkey autostart on"
+      ;;
+    *) echo "Usage: ./fixkey autostart on|off|add" >&2; return 2 ;;
+  esac
+}
+
+cmd_reminder() {
+  case "$ACTION" in
+    on) reminder_on ;;
+    off) reminder_off ;;
+    *) echo "Usage: ./fixkey reminder on|off" >&2; return 2 ;;
+  esac
+}
+
+cmd_uninstall() {
+  title "Remove Fixkey from this Mac" "Fjern Fixkey fra denne Mac"
+  info "This removes the relay that starts by itself, the reminder, and their files and logs." \
+    "Dette fjerner relæet, der starter af sig selv, påmindelsen og deres filer og logs."
+  info "This folder, Llama.app, the model and the app on the iPhone stay." \
+    "Denne mappe, Llama.app, modellen og appen på iPhonen bliver."
+  ask_yes "Continue?" "Fortsæt?" y || return 0
+  remove_agent "$RELAY_AGENT"
+  remove_agent "$REMINDER_AGENT"
+  pkill -f "lan-relay/relay.py" 2>/dev/null
+  rm -rf "$SUPPORT_DIR" "$LOG_DIR"
+  ok "Removed what Fixkey set up on this Mac." "Fjernede det, Fixkey satte op på denne Mac."
+  info "To remove the rest: delete the app on the iPhone (touch and hold › Remove App), this folder, and the model in Llama.app." \
+    "Resten fjerner du sådan: slet appen på iPhonen (hold på den › Fjern app), denne mappe og modellen i Llama.app."
+}
+
+cmd_menu() {
+  local choice relay_choice auto_choice reminder_choice
+  if [ ! -f "$LOCAL_CONFIG" ]; then
+    cmd_setup
+    return
+  fi
+  if agent_installed "$RELAY_AGENT"; then
+    relay_choice=$(t "Allow this Wi-Fi network for the relay" "Tillad dette Wi-Fi-netværk for relæet")
+    auto_choice=$(t "Stop starting the relay by itself" "Stop med at starte relæet af sig selv")
+  else
+    relay_choice=$(t "Run the relay in this window" "Kør relæet i dette vindue")
+    auto_choice=$(t "Start the relay by itself when I log in" "Start relæet af sig selv, når jeg logger ind")
+  fi
+  if agent_installed "$REMINDER_AGENT"; then
+    reminder_choice=$(t "Turn the 7-day reminder off" "Slå påmindelsen om de 7 dage fra")
+  else
+    reminder_choice=$(t "Remind me when the 7 days are over" "Påmind mig, når de 7 dage er gået")
+  fi
+  title "Fixkey" "Fixkey"
+  printf '  1) %s\n' "$(t "Reinstall on the iPhone (every 7 days)" "Geninstaller på iPhonen (hver 7. dag)")"
+  printf '  2) %s\n' "$relay_choice"
+  printf '  3) %s\n' "$(t "Check everything" "Tjek alt")"
+  printf '  4) %s\n' "$auto_choice"
+  printf '  5) %s\n' "$reminder_choice"
+  printf '  6) %s\n' "$(t "Choose the language model" "Vælg sprogmodellen")"
+  printf '  7) %s\n' "$(t "Run the whole setup again" "Kør hele opsætningen igen")"
+  printf '  q) %s\n' "$(t "Quit" "Afslut")"
+  if ! interactive; then
+    # Without a person at the keyboard, the menu chooses nothing.
+    info "Run a command instead, for example ./fixkey doctor (see ./fixkey help)." "Kør en kommando i stedet, for eksempel ./fixkey doctor (se ./fixkey help)."
+    return 0
+  fi
+  choice=$(ask "Choose" "Vælg" 3)
+  case "$choice" in
+    1) cmd_install ;;
+    2) if agent_installed "$RELAY_AGENT"; then ACTION=add cmd_autostart; else cmd_relay; fi ;;
+    3) cmd_doctor ;;
+    4) if agent_installed "$RELAY_AGENT"; then autostart_off; else ACTION=on cmd_autostart; fi ;;
+    5) if agent_installed "$REMINDER_AGENT"; then reminder_off; else reminder_on; fi ;;
+    6) cmd_model ;;
+    7) cmd_setup ;;
+    *) return 0 ;;
+  esac
+}
+
+case "$COMMAND" in
+  "") cmd_menu ;;
+  setup) cmd_setup ;;
+  reinstall | install) cmd_install ;;
+  relay) cmd_relay ;;
+  doctor | check) cmd_doctor ;;
+  model) cmd_model ;;
+  configure) cmd_configure ;;
+  test) cmd_test ;;
+  autostart) cmd_autostart ;;
+  reminder) cmd_reminder ;;
+  uninstall) cmd_uninstall ;;
+  help) cmd_help ;;
+  *) echo "Unknown command: $COMMAND (see ./fixkey help)" >&2; exit 2 ;;
+esac

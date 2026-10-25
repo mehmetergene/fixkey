@@ -1,0 +1,117 @@
+name: Fixkey
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+# Personal values (team, bundle ID prefix, Mac name, relay key, certificate) come from Config/*.xcconfig.
+# Fixkey.xcodeproj is generated from this file and committed, so building needs no XcodeGen.
+# After changing this file, run `xcodegen generate` and commit both.
+configFiles:
+  Debug: Config/Fixkey.xcconfig
+  Release: Config/Fixkey.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.4.0"
+    CURRENT_PROJECT_VERSION: "4"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  Fixkey:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - Shared
+      - KeyboardUI
+    dependencies:
+      - target: FixkeyKeyboard
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(FIXKEY_BUNDLE_ID_PREFIX).fixkey
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Fixkey
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Fixkey sends text you choose to fix to the language model running on your own Mac.
+        FixkeyMacHost: $(FIXKEY_MAC_HOST)
+        FixkeyRelayPort: $(FIXKEY_RELAY_PORT)
+        FixkeyLlamaPort: $(FIXKEY_LLAMA_PORT)
+        FixkeyAPIKey: $(FIXKEY_API_KEY)
+        FixkeyRelayCertSHA256: $(FIXKEY_RELAY_CERT_SHA256)
+        FixkeyModel: $(FIXKEY_MODEL)
+
+  FixkeyKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Keyboard
+      - Shared
+      - KeyboardUI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(FIXKEY_BUNDLE_ID_PREFIX).fixkey.keyboard
+    info:
+      path: Keyboard/Info.plist
+      properties:
+        CFBundleDisplayName: Fixkey
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Fixkey sends text you choose to fix to the language model running on your own Mac.
+        FixkeyMacHost: $(FIXKEY_MAC_HOST)
+        FixkeyRelayPort: $(FIXKEY_RELAY_PORT)
+        FixkeyLlamaPort: $(FIXKEY_LLAMA_PORT)
+        FixkeyAPIKey: $(FIXKEY_API_KEY)
+        FixkeyRelayCertSHA256: $(FIXKEY_RELAY_CERT_SHA256)
+        FixkeyModel: $(FIXKEY_MODEL)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: da-DK
+            RequestsOpenAccess: true
+
+  # Unit tests for the keyboard logic, run in the simulator: Tools/test.sh --simulator
+  FixkeyTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+    dependencies:
+      - target: Fixkey
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(FIXKEY_BUNDLE_ID_PREFIX).fixkey.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Fixkey:
+    build:
+      targets:
+        Fixkey: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - FixkeyTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

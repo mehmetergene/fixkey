@@ -1,0 +1,85 @@
+# Keyboard design
+
+[Dansk](../da/keyboard-design.md) · [Back to README](../../README.md)
+
+Fixkey should feel like the iPhone's own keyboard with one extra button. iOS doesn't let a keyboard extension embed Apple's keyboard, so Fixkey rebuilds it, using measurements from screenshots of Apple's Danish keyboard.
+
+## Layout
+
+Fixkey is 251 pt tall: a 42 pt strip and a 209 pt key area.
+
+```text
+┌─────────────────────────────────────────────┐
+│ (✓)  Ret teksten · suggestions               │  strip, 42 pt
+├─────────────────────────────────────────────┤
+│  q  w  e  r  t  y  u  i  o  p  å            │
+│  a  s  d  f  g  h  j  k  l  æ  ø            │  keys, 209 pt
+│  ⇧     z  x  c  v  b  n  m     ⌫            │
+│ 123  (🌐)  ________ space ________  ↵        │
+└─────────────────────────────────────────────┘
+```
+
+- **Letters:** the Danish QWERTY layout with å at the end of the top row, and æ and ø at the end of the middle row.
+- **Third row:** narrow shift and delete keys (41 pt) at the edges. Z–M stay in the same columns as E–O, like Apple's keyboard.
+- **Bottom row:** 123/ABC, the globe (only when iOS asks for it), space and return. There's no emoji key; space is wider instead.
+- **Numbers and symbols pages:** the Danish number row with `kr`, plus a second symbols page with `£ € $`.
+- **Return key:** a `return.left` symbol by default. When the text field asks for a special label, it shows the word in Danish: *søg, send, gå, næste, færdig, tilmeld, rute, fortsæt*.
+- **Space bar:** unlabelled, with a small grey "DA" tag like Apple's.
+
+## Measured metrics
+
+These were measured from 3× screenshots of Apple's keyboard on an iPhone. Version 0.4 repeated the measurement automatically on the iPhone in light and dark mode (a UI test switches the appearance and the keyboards), and Fixkey's letters now match Apple's to the pixel.
+
+| Metric | Value |
+|---|---|
+| Key height | 43 pt |
+| Gap between keys | 6 pt |
+| Space between rows | 11 pt |
+| Side margin | 6.5 pt |
+| Top inset | 4 pt |
+| Shift and delete width | 41 pt |
+| 123 key width | 43.3 pt |
+| Return key width | 93 pt |
+| Corner radius | 8.5 pt, continuous corners |
+| Lowercase letters | 24.5 pt, raised 2.4 pt above the key's centre. Apple draws lowercase letters larger than capitals. |
+| Capital letters | 21.3 pt, raised 1.2 pt above the key's centre (a centred letter looks low) |
+| Digits and punctuation | 22 pt, raised 1.2 pt |
+| Label size (123, words) | 18 pt |
+| Symbol size (shift, delete, return) | 20 pt |
+| Key colour, dark mode | #444444 (Apple's measures #444444–#464646), the same for letters and function keys, no shadow |
+| Pressed key, dark mode | #6B6B6B |
+| Key colour, light mode | #FFFFFF, the same for letters and function keys, no shadow; pressed ≈ #BDC2C9 (estimated) |
+
+## Typing behaviour
+
+| Action | Behaviour |
+|---|---|
+| Tap a key | Highlights on touch-down; types on touch-up. A popup shows the letter. |
+| Two thumbs | Multi-touch rollover, so fast typing doesn't drop letters |
+| Hold a letter (0.4 s) | Accents: a → æ å ä á à…, o → ø ö ó…, e → é è ê…, and others |
+| Shift | Tap for one capital letter, double-tap for caps lock |
+| Auto-capitalisation | Follows the text field's setting (sentences, words, all or none) |
+| Double space | Types ". ", as Apple's keyboard does |
+| Hold delete | Repeats, then deletes whole words |
+| Drag on space | Moves the cursor |
+| Feedback | The system key click only (follows **Settings › Sounds & Haptics › Keyboard Feedback**). No vibration. |
+
+## The Fixkey strip and card
+
+Fixkey's checking UI follows Grammarly's keyboard:
+
+- **The icon** (`text.badge.checkmark`) sits at the left of the strip. Tap it to check. A red badge shows how many changes are waiting.
+- **Strip states:** *Tryk for at tjekke teksten* (idle) → *Tjekker…* → the first change as a chip (*Ret teksten* over the replacement in green), or *Ser godt ud* when nothing needs fixing, or a short error.
+- **Word suggestions** take over the strip while you type a word, like the QuickType bar. Tapping a suggestion replaces the word; the first slot keeps what you typed.
+- **The card** replaces the keys:
+  - title: *Korrekthed: Ret teksten*;
+  - your text with the changes marked: removed words in red with strikethrough, added words in green;
+  - tap a change to turn it off: your own words stay, with a dotted underline, and the suggestion turns grey and struck through. Tap again to turn it back on;
+  - a summary: *Fixkey fandt 3 rettelser. Tryk på en for at fravælge den.*, or *2 af 3 rettelser valgt.* once you've turned one off;
+  - **Accepter** (green) applies the changes that are on, **Afvis** throws them all away, and ⌨ returns to the keys and keeps the suggestion behind the badge. The badge counts the changes that are on.
+
+All keyboard text is in Danish. The container app is in English.
+
+## App icon
+
+A green rounded square with a white text-check symbol. It's generated by `Tools/app-icon/make-icon.swift` (see [development.md](development.md)).

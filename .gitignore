@@ -1,0 +1,23 @@
+# Fixkey.xcodeproj is generated from project.yml but committed; only per-user Xcode state stays out
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Build output
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Personal values and secrets (./fixkey configure writes them; see Config/Local.example.xcconfig)
+Config/Local.xcconfig
+Tools/lan-relay/key.txt
+Tools/lan-relay/relay-cert.pem
+Tools/lan-relay/relay-key.pem
+
+# Model evaluation results
+Tools/model-eval/results*.json
+
+# Python byte code
+__pycache__/
+
+.DS_Store
