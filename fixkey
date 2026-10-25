@@ -117,9 +117,10 @@ ask() {
   printf '%s' "${answer:-$3}"
 }
 
+# Fails at the end of the input, so a run fed from a file or a closed terminal stops instead of waiting forever.
 pause() {
   interactive || return 0
-  read -r -p "  $(t "${1:-Press Enter to continue.}" "${2:-Tryk Enter for at fortsætte.}") " _ || true
+  read -r -p "  $(t "${1:-Press Enter to continue.}" "${2:-Tryk Enter for at fortsætte.}") " _
 }
 
 # Runs a check until it passes, showing how to fix it in between. Without a person to ask, it stops instead.
@@ -129,7 +130,7 @@ require() {
       info "Fix this, then run the command again." "Ret det, og kør kommandoen igen."
       exit 1
     fi
-    pause "Press Enter to check again (Ctrl+C stops)." "Tryk Enter for at tjekke igen (Ctrl+C stopper)."
+    pause "Press Enter to check again (Ctrl+C stops)." "Tryk Enter for at tjekke igen (Ctrl+C stopper)." || exit 1
   done
 }
 
@@ -876,7 +877,13 @@ wait_for_iphone() {
   end=$(($(date +%s) + seconds))
   while [ "$(date +%s)" -lt "$end" ]; do
     tail -n +"$((${LOG_MARK:-0} + 1))" "$RELAY_LOG" 2>/dev/null | grep -F "$pattern" | grep -qvF " $mac " && return 0
-    if interactive; then read -r -t 2 _ && return 1; else sleep 2; fi
+    # Enter skips the wait; at the end of the input there is nothing left to read, so just wait.
+    if interactive; then
+      read -r -t 2 _
+      case $? in 0) return 1 ;; 1) sleep 2 ;; esac
+    else
+      sleep 2
+    fi
   done
   return 1
 }
