@@ -811,17 +811,29 @@ launch_app() {
 }
 
 # When the free Apple ID's 7-day permit for the installed build runs out.
-expiry() {
+# Seconds since 1970 when the build in $APP_PATH stops working: the end of its provisioning profile.
+build_expiry() {
   [ -f "$APP_PATH/embedded.mobileprovision" ] || return 1
   security cms -D -i "$APP_PATH/embedded.mobileprovision" 2>/dev/null | python3 -I -c '
-import plistlib, sys
-from datetime import datetime, timezone
+import calendar, plistlib, sys
 try:
-    date = plistlib.loads(sys.stdin.buffer.read())["ExpirationDate"].replace(tzinfo=timezone.utc).astimezone()
+    print(calendar.timegm(plistlib.loads(sys.stdin.buffer.read())["ExpirationDate"].timetuple()))
 except Exception:
-    sys.exit(1)
-print(date.strftime(sys.argv[1]), "expired" if date < datetime.now(timezone.utc) else "valid")
-' "$(t '%a %d %b %Y at %H:%M' '%d.%m.%Y kl. %H.%M')"
+    sys.exit(1)'
+}
+
+# When the Fixkey on the iPhone stops working, and whether it already has. The date recorded at the last install or
+# renewal comes first: renewing builds elsewhere, so this folder's build can be older than the app on the iPhone.
+expiry() {
+  local seconds
+  seconds=$(tr -cd '0-9' 2>/dev/null <"$SUPPORT_DIR/expiry")
+  [ -n "$seconds" ] || seconds=$(build_expiry) || return 1
+  python3 -I -c '
+import sys, time
+from datetime import datetime
+seconds = int(sys.argv[1])
+print(datetime.fromtimestamp(seconds).strftime(sys.argv[2]), "expired" if seconds < time.time() else "valid")
+' "$seconds" "$(t '%a %d %b %Y at %H:%M' '%d.%m.%Y kl. %H.%M')"
 }
 
 show_expiry() {
@@ -1038,13 +1050,7 @@ check_autostart() {
 # Remembers when the installed build stops working, for the reminder (seconds since 1970).
 record_expiry() {
   local seconds
-  [ -f "$APP_PATH/embedded.mobileprovision" ] || return 0
-  seconds=$(security cms -D -i "$APP_PATH/embedded.mobileprovision" 2>/dev/null | python3 -I -c '
-import calendar, plistlib, sys
-try:
-    print(calendar.timegm(plistlib.loads(sys.stdin.buffer.read())["ExpirationDate"].timetuple()))
-except Exception:
-    pass')
+  seconds=$(build_expiry) || return 0
   [ -n "$seconds" ] || return 0
   private_support_dir
   echo "$seconds" >"$SUPPORT_DIR/expiry"
