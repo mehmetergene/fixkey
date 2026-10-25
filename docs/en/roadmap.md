@@ -2,12 +2,13 @@
 
 [Dansk](../da/roadmap.md) · [Back to README](../../README.md)
 
-## Where it stands (October 2026, version 0.4)
+## Where it stands (October 2026, version 0.5)
 
 Fixkey is a working prototype for personal use:
 
 - The keyboard, word suggestions and autocorrect, the grammar check, guardrails and the encrypted Wi-Fi relay all work on a real iPhone.
-- The recommended model scores 45 of 53 test cases, with a median check time of 0.9 s. You can choose another.
+- The recommended model scores 50 of 53 test cases, with a median check time of 0.9 s. You can choose another.
+- Fixkey renews itself over Wi-Fi before a free Apple ID's 7 days end.
 - It's tested on an iPhone and an M2 MacBook Pro with 8 GB.
 
 ## Milestones so far
@@ -30,13 +31,17 @@ Fixkey is a working prototype for personal use:
    - **Letters like Apple's:** measured on the iPhone in light and dark mode; lowercase letters are now larger and higher, as on Apple's keyboard.
    - **Tests:** relay tests, shared-code checks, keyboard unit tests, 10 new Danish model cases, and one test command (`Tools/test.sh`).
    - **No XcodeGen needed** to build: the Xcode project is committed.
+10. **Version 0.5:**
+    - **Renews itself:** from 2 days before the end, the Mac rebuilds Fixkey and installs it over Wi-Fi when the iPhone is on the same network, then shows a notification. The reminder stays for when it can't, and says so when Xcode needs the Apple ID again. The app shows **Works until**.
+    - **Past tense:** a rule in code turns "har" + participle into the simple past when a fixed past time is in the same clause (*har været … sidste sommer* → *var*). It raised the model test from 45/53 to 50/53, with no new misses.
+    - **Safer reinstalls:** a failed build puts Xcode's cached permits back instead of losing them, and an expired Xcode sign-in is named as such.
 
 ## Known limitations
 
 - **Same network only.** The keyboard reaches the Mac on the same Wi-Fi network or over the iPhone's Personal Hotspot, not over the internet.
 - **The Mac must be on and awake,** on a Wi-Fi network you allowed. The first check after 5 idle minutes takes a few extra seconds.
-- **Model misses.** Mostly Danish tense with past-time words, and some idioms; the model sometimes changes meaning (see [model-evaluation.md](model-evaluation.md)). Always read the card before accepting.
-- **Free Apple ID.** The app must be reinstalled every 7 days, with the iPhone connected by cable (double-click `Reinstall Fixkey.command`).
+- **Model misses.** Mostly idioms (*havde travlt*, *tage fejl af*); the model can still change the meaning of a sentence (see [model-evaluation.md](model-evaluation.md)). Always read the card before accepting.
+- **Free Apple ID.** The app must be reinstalled every 7 days. Fixkey does it over Wi-Fi when the Mac is awake and the iPhone on the same network during the last 2 days, and when Xcode is signed in to the Apple ID; otherwise it asks for the cable.
 - **No emoji key.** Use the globe key to switch to Apple's keyboard for emoji.
 - **One check covers the text around the cursor:** up to about 800 characters on each side, in whole sentences.
 
@@ -44,9 +49,8 @@ Fixkey is a working prototype for personal use:
 
 | Idea | Why |
 |---|---|
-| A tense check for past-time words (*i går*, *sidste uge*, *for … siden*) | The model's most common miss |
+| Rules for common idioms (*havde travlt*, *tage fejl af*, *hvor meget*) | The model's remaining misses |
 | Reach the Mac away from home (for example over Tailscale) | Use Fixkey anywhere |
-| Renew from the iPhone: a button in the app that asks the Mac to reinstall over Wi-Fi before the 7 days end | No cable needed |
 | Server address and key set in the app instead of at build time | No rebuild when the Mac or key changes |
 | Explanations per change (*why* it's wrong) | More like Grammarly. Needs a reliable format from a small model. |
 | Try newer small models as they appear | Run them through `Tools/model-eval` |

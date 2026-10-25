@@ -67,17 +67,20 @@ Nothing personal or secret is committed. `.gitignore` excludes:
 
 Outside the repository, in folders only you can open:
 
-- `~/Library/Application Support/Fixkey`: for the relay that starts by itself, copies of `relay.py`, the key and the certificate; `networks.txt` with the allowed networks' hashes; for the reminder, its script, the date the 7 days end and the path of the Fixkey folder;
-- `~/Library/Logs/Fixkey`: the logs of the relay and the reminder, without text.
+- `~/Library/Application Support/Fixkey`:
+  - for the relay that starts by itself, copies of `relay.py`, the key and the certificate, and `networks.txt` with the allowed networks' hashes;
+  - for renewing, a copy of the Fixkey folder (`source`, about 2 MB, with your settings, key and certificate), the date the 7 days end, the iPhone's ID and the path of the Fixkey folder;
+- `~/Library/Caches/Fixkey`: the builds for renewing;
+- `~/Library/Logs/Fixkey`: the logs of the relay and of renewing, without text.
 
-`./fixkey uninstall` removes both folders and the two LaunchAgents.
+`./fixkey uninstall` removes these folders and the two LaunchAgents.
 
 ## What runs in the background
 
 Only what you agree to during setup, as LaunchAgents in `~/Library/LaunchAgents`. Both run as you, without administrator rights, from files only you can change:
 
 - `local.fixkey.relay`: the relay, started at login and restarted if it stops. It accepts connections only on allowed networks, as described above, and opens Llama.app when a check needs it.
-- `local.fixkey.reminder`: every 3 hours, a short script compares the date the 7 days end with today and may show a dialog. It reads only its own files and never uses the network. Its **Reinstall** button opens Terminal at `./fixkey reinstall` in your Fixkey folder.
+- `local.fixkey.reminder`: every 3 hours, a short script compares the date the 7 days end with today. From 2 days before, it builds Fixkey from the private copy and installs it on your paired iPhone with Xcode's own tools (`xcodebuild`, `devicectl`), over the encrypted connection Xcode keeps to the iPhone. It opens no network port. When that doesn't work, it shows a dialog, whose **Reinstall** button opens Terminal at `./fixkey reinstall` in your Fixkey folder.
 
 ## Prompt injection
 

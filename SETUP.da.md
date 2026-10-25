@@ -97,9 +97,9 @@ Assistenten taler dansk, hvis din Mac er sat til dansk (`./fixkey setup --lang d
   …
   ✓ Dit første tjek virkede
 
-8. En påmindelse hver 7. dag
-  Påmind dig, når det sker (anbefales)? [J/n]
-  ✓ Fixkey påminder dig dagen før de 7 dage slutter, og igen når de er gået
+8. Hver 7. dag
+  Forny Fixkey af sig selv (anbefales)? [J/n]
+  ✓ Fixkey fornyer sig selv over Wi-Fi, når der er 2 dage tilbage, og minder dig om det, hvis den ikke kan
 ```
 
 Mangler der noget, siger den, hvad du skal gøre, og venter, til du har gjort det. De spørgsmål, den kan stille:
@@ -109,7 +109,7 @@ Mangler der noget, siger den, hvad du skal gøre, og venter, til du har gjort de
 - **Hold modellens hukommelsesforbrug nede?** Kun på Macs med 8 GB. Svar ja.
 - **App-id.** Din egen udgave af appen skal have et navn som `com.ditnavn`. Tryk Enter for at bruge forslaget.
 - **Start relæet af sig selv, når du logger ind?** Svar ja, så skal du aldrig starte noget igen. Det lytter kun på Wi-Fi-netværk, du tillader, begyndende med det, Macen er på nu.
-- **Påmind dig, når de 7 dage slutter?** Svar ja; se [Hver 7. dag](#hver-7-dag).
+- **Forny Fixkey af sig selv?** Svar ja; se [Hver 7. dag](#hver-7-dag).
 - **Hvilket team eller hvilken iPhone?** Kun hvis Xcode kender flere teams, eller flere iPhones er forbundet.
 
 ## Trin 4: På iPhonen
@@ -158,20 +158,22 @@ Starter relæet af sig selv (du svarede ja, da assistenten spurgte), er der inte
 
 ## Hver 7. dag
 
-Med et gratis Apple-id holder apps, du selv bygger, op med at åbne efter 7 dage. Intet går tabt: hver geninstallation giver 7 nye dage fra det øjeblik, så du kan gøre det, når det passer dig, før eller efter de 7 dage.
+Med et gratis Apple-id holder apps, du selv bygger, op med at åbne efter 7 dage, til de bliver geninstalleret. **Fixkey fornyer sig selv** (hvis du sagde ja i trin 8 i opsætningen): når der er 2 dage tilbage, geninstallerer Macen den over Wi-Fi, mens iPhonen er på samme netværk og Macen er vågen, og viser en notifikation, når det er gjort. Hver geninstallation giver 7 nye dage. Fixkey-appen viser datoen under **Your Mac › Works until**.
+
+Kan den ikke det (iPhonen har været væk i 2 dage, eller Xcode skal have dit Apple-id igen), siger Macen til dagen før, og hvad du skal gøre. Sådan fornyer du selv, når som helst:
 
 1. Forbind iPhonen med kablet, og lås den op.
 2. **Dobbeltklik på `Reinstall Fixkey.command`** i Fixkey-mappen. Det er det hele; det tager et minut eller to.
 
-Påmindelsen siger til dagen før (og igen bagefter) med knappen **Geninstaller**, der gør det samme. `./fixkey doctor` viser den præcise dato. Beder iPhonen dig stole på dit Apple-id igen, så se trin 4.
+`./fixkey doctor` viser den præcise dato. Beder iPhonen dig stole på dit Apple-id igen, så se trin 4.
 
 ## Vælg sprogmodellen
 
-Fixkey anbefaler den model, den er testet med, **Qwen3.5 4B** (45 af 53 testtilfælde rigtige, et sekund eller to pr. tjek på en M2 med 8 GB). Du kan bruge enhver anden model, som Llama.app kan køre:
+Fixkey anbefaler den model, den er testet med, **Qwen3.5 4B** (50 af 53 testtilfælde rigtige, et sekund eller to pr. tjek på en M2 med 8 GB). Du kan bruge enhver anden model, som Llama.app kan køre:
 
 1. Dobbeltklik på **Fixkey Setup**, og vælg **Vælg sprogmodellen**, eller kør `./fixkey model`.
 2. Vælg en model, du allerede har i Llama.app, eller vælg **Hent en anden model fra Hugging Face**, og skriv dens navn fra Hugging Face med kvantiseringen efter et kolon, for eksempel `unsloth/Qwen3.5-4B-GGUF:Q4_K_M`.
-3. Assistenten tester den med en sætning og tilbyder at give den point på Fixkeys 53 testtilfælde ved siden af den anbefalede models 45.
+3. Assistenten tester den med en sætning og tilbyder at give den point på Fixkeys 53 testtilfælde ved siden af den anbefalede models 50.
 
 Valget gemmes på Macen, og relæet bruger det, så iPhonen behøver intet. På en Mac med 8 GB skal du holde dig til cirka 4B parametre med 4-bit-kvantisering (Q4); større Macs kan prøve større modeller. [Test af modellen](docs/da/model-evaluation.md) forklarer, hvordan Fixkeys test virker.
 
@@ -198,10 +200,10 @@ Denne vejledning er til en AI-kodeassistent (Claude Code, Codex, Cursor eller li
 1. Kør `./fixkey doctor`. Den ændrer ingenting. Gå dens ✗-linjer igennem fra toppen.
 2. **Xcode.** Mangler den eller er den ikke sat op, så bed personen installere den fra App Store, åbne den én gang og acceptere licensen. Peger `xcode-select` et andet sted hen, så spørg, før du kører `sudo xcode-select -s /Applications/Xcode.app`.
 3. **Apple-id.** Er Xcode ikke logget ind, så bed personen åbne Xcode › Settings › Apple Accounts (Accounts i ældre Xcode) og tilføje sit Apple-id.
-4. **Model.** Anbefal den testede model (Qwen3.5 4B, cirka 2,7 GB). Spørg, og kør så `./fixkey model --yes`: den starter Llama.app, henter modellen, begrænser hukommelsen på Macs med 8 GB og tester modellen. Vil personen have en anden model, så kør `./fixkey model use <ejer/model-GGUF:KVANT> --yes` i stedet, og tilbyd `./fixkey model evaluate` (et par minutter) for at sammenligne den med den anbefalede models 45/53.
+4. **Model.** Anbefal den testede model (Qwen3.5 4B, cirka 2,7 GB). Spørg, og kør så `./fixkey model --yes`: den starter Llama.app, henter modellen, begrænser hukommelsen på Macs med 8 GB og tester modellen. Vil personen have en anden model, så kør `./fixkey model use <ejer/model-GGUF:KVANT> --yes` i stedet, og tilbyd `./fixkey model evaluate` (et par minutter) for at sammenligne den med den anbefalede models 50/53.
 5. **Indstillinger.** Foreslå et app-id-præfiks som `com.<fornavn>` med små bogstaver, og bed personen bekræfte det. Kør så `./fixkey configure --yes --prefix <præfiks>`. Kender Xcode flere teams, så spørg hvilket, og giv også `--team <ID>` med.
 6. **Relæ.** Spørg, om relæet skal starte af sig selv, når personen logger ind (anbefales; det lytter kun på det nuværende Wi-Fi-netværk, til personen tillader andre). Hvis ja, så kør `./fixkey autostart on --yes`. Hvis nej, så start `./fixkey relay` som en proces, der bliver ved med at køre, i en separat terminal. Kør derefter `./fixkey test`: den skal sige, at relæet virker.
 7. **iPhone.** Bed personen forbinde iPhonen med et kabel og låse den op, og kør `./fixkey install --yes`. Stopper den med et ✗, så læs tippet op, hjælp personen med det på iPhonen (Udviklertilstand, Stol på, lås op), og kør kommandoen igen.
 8. **Tastatur.** Guid personen gennem Indstillinger › Apps › Fixkey › Tastaturer: slå Fixkey og Tillad fuld adgang til. Bed dem så skrive `jeg har ikke mye tid idag` i Noter med Fixkey-tastaturet og trykke på det grønne ikon. Relæets log (`~/Library/Logs/Fixkey/relay.log` med automatisk start, ellers relæets terminal) viser `POST /v1/chat/completions  200`, når tjekket når Macen.
-9. **Påmindelse.** Spørg, om personen vil have en påmindelse, når de 7 dage slutter (anbefales). Hvis ja, så kør `./fixkey reminder on --yes`.
-10. **Afslut.** Fortæl personen: på et andet Wi-Fi-netværk, de bruger, så kør `./fixkey autostart add` (eller brug menuen i Fixkey Setup); hver 7. dag, forbind iPhonen, og dobbeltklik på `Reinstall Fixkey.command` (hver geninstallation giver 7 nye dage); `./fixkey doctor` tjekker det hele. Henvis til `docs/da/faq.md` ved spørgsmål.
+9. **Fornyelse.** Spørg, om Fixkey skal forny sig selv over Wi-Fi, før de 7 dage slutter, med en påmindelse, hvis den ikke kan (anbefales). Hvis ja, så kør `./fixkey reminder on --yes`.
+10. **Afslut.** Fortæl personen: på et andet Wi-Fi-netværk, de bruger, så kør `./fixkey autostart add` (eller brug menuen i Fixkey Setup); Fixkey fornyer sig selv over Wi-Fi hver 7. dag og siger, hvad de skal gøre, hvis den ikke kan (i hånden: forbind iPhonen, og dobbeltklik på `Reinstall Fixkey.command`); `./fixkey doctor` tjekker det hele. Henvis til `docs/da/faq.md` ved spørgsmål.

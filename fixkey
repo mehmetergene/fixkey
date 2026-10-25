@@ -8,7 +8,7 @@
 #   ./fixkey reinstall           build and install on the iPhone again: 7 more days with a free Apple ID
 #   ./fixkey autostart on|off    start the relay by itself when you log in, only on Wi-Fi networks you allow
 #   ./fixkey autostart add       allow the Wi-Fi network this Mac is on now
-#   ./fixkey reminder on|off     remind you when the 7 days on the iPhone are over
+#   ./fixkey reminder on|off     renew by itself over Wi-Fi when the 7 days are nearly over, and remind you if it can't
 #   ./fixkey relay               run the relay in this window instead (when it doesn't start by itself)
 #   ./fixkey doctor              check everything and say what to fix; changes nothing
 #   ./fixkey uninstall           remove what Fixkey set up on this Mac (this folder and the iPhone app stay)
@@ -19,13 +19,14 @@
 #   ./fixkey configure [--team ID] [--prefix PREFIX]   create the key, certificate and Config/Local.xcconfig
 #   ./fixkey install [--device UDID]                   build and install on the iPhone (same as reinstall)
 #   ./fixkey test                                      check the running relay from the Mac
+#   ./fixkey renew                                     build and install over Wi-Fi, no questions (what the reminder runs)
 #
 # Options: --lang en|da   --yes (take the suggested answer to every question and never wait for Enter)
 
 cd "$(dirname "$0")" || exit 1
 
 RECOMMENDED_MODEL="unsloth/Qwen3.5-4B-GGUF:Q4_K_M"
-RECOMMENDED_SCORE="45/53"
+RECOMMENDED_SCORE="50/53"
 RELAY_DIR=Tools/lan-relay
 KEY_FILE=$RELAY_DIR/key.txt
 CERT_FILE=$RELAY_DIR/relay-cert.pem
@@ -40,12 +41,23 @@ AUTOSTART_DIR="$SUPPORT_DIR/relay"
 NETWORKS_FILE="$SUPPORT_DIR/networks.txt"
 LOG_DIR="$HOME/Library/Logs/Fixkey"
 AGENTS_DIR="$HOME/Library/LaunchAgents"
+# Renewing by itself builds from a copy of what the build needs, into the cache, so it never needs this folder.
+SOURCE_DIR="$SUPPORT_DIR/source"
+CACHE_DIR="$HOME/Library/Caches/Fixkey"
+# Where Xcode keeps the 7-day permits (provisioning profiles) it has fetched.
+XCODE_PERMITS="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+DEVICE_PERMITS="$HOME/Library/MobileDevice/Provisioning Profiles"
 RELAY_AGENT=local.fixkey.relay
 REMINDER_AGENT=local.fixkey.reminder
 XCODE_STORE_URL="macappstore://apps.apple.com/app/id497799835"
 LLAMA_URL="https://llama.app"
 
 # MARK: Options
+
+if [ "$PWD" = "$SOURCE_DIR" ]; then
+  BUILD_DIR="$CACHE_DIR/device"
+  APP_PATH=$BUILD_DIR/Build/Products/Release-iphoneos/Fixkey.app
+fi
 
 LANG_CODE=en
 case "$(defaults read -g AppleLanguages 2>/dev/null | tr -d ' \n"()' | cut -d, -f1)" in da*) LANG_CODE=da ;; esac
@@ -361,6 +373,7 @@ EOF
   ok "Fixkey now uses $1. The iPhone needs nothing: the relay passes on the choice." \
     "Fixkey bruger nu $1. iPhonen behøver intet: relæet giver valget videre."
   refresh_autostart
+  refresh_reminder
 }
 
 # Scores a model on Fixkey's test cases, like Tools/model-eval, and compares it with the recommended model.
@@ -693,9 +706,13 @@ check_developer_mode() {
 }
 
 # Explains the most common build and install errors in plain words.
+SIGN_IN_ERRORS='No Accounts|No account for team|session has expired|Sign in with your Apple|Unable to log in with account|login details for account'
+LOCKED_ERRORS='device is locked|could not be, unlocked|passcode protected|unlock (your|the) (iPhone|device)'
+UNREACHABLE_ERRORS='Unable to find a destination|not connected|device was not found|device is not available'
+
 explain_failure() {
   local log=$1
-  if grep -qiE 'No Accounts|No account for team|session has expired|Sign in with your Apple' "$log"; then
+  if grep -qiE "$SIGN_IN_ERRORS" "$log"; then
     fail "Xcode's sign-in to your Apple ID has expired or is missing." "Xcodes login med dit Apple-id er udløbet eller mangler."
     hint "Open Xcode › Settings › Apple Accounts and sign in again, then run ./fixkey reinstall." "Åbn Xcode › Settings › Apple Accounts, log ind igen, og kør ./fixkey reinstall."
   elif grep -qiE 'maximum App ID limit|up to 10 App IDs' "$log"; then
@@ -710,14 +727,14 @@ explain_failure() {
   elif grep -qiE 'Developer Mode' "$log"; then
     fail "Developer Mode is off on the iPhone." "Udviklertilstand er slået fra på iPhonen."
     hint "Settings › Privacy & Security › Developer Mode › on, then run ./fixkey reinstall." "Indstillinger › Anonymitet & sikkerhed › Udviklertilstand › til, og kør ./fixkey reinstall."
-  elif grep -qiE 'device is locked|could not be, unlocked|passcode protected|unlock (your|the) (iPhone|device)' "$log"; then
+  elif grep -qiE "$LOCKED_ERRORS" "$log"; then
     fail "The iPhone is locked." "iPhonen er låst."
     hint "Unlock it and try again." "Lås den op, og prøv igen."
   elif grep -qiE 'not (been )?explicitly trusted|untrusted developer|profile has not been|invalid code signature' "$log"; then
     fail "The iPhone doesn't trust your developer profile yet." "iPhonen stoler ikke på din udviklerprofil endnu."
     hint "On the iPhone: Settings › General › VPN & Device Management › your Apple ID under Developer App › Trust." \
       "På iPhonen: Indstillinger › Generelt › VPN og enhedsadministration › dit Apple-id under Udviklerapp › Stol på."
-  elif grep -qiE 'Unable to find a destination|not connected|device was not found|device is not available' "$log"; then
+  elif grep -qiE "$UNREACHABLE_ERRORS" "$log"; then
     fail "The iPhone isn't reachable right now." "iPhonen kan ikke nås lige nu."
     hint "Connect the cable, unlock the iPhone and try again." "Sæt kablet i, lås iPhonen op, og prøv igen."
   else
@@ -728,11 +745,14 @@ explain_failure() {
 }
 
 # Xcode reuses a cached 7-day permit until it runs out. Without it, Xcode fetches a new one, so every reinstall
-# gives 7 days from now. Only Fixkey's own permits are removed.
+# gives 7 days from now. Only Fixkey's own permits are set aside, and put_back_permits restores them when the
+# build fails, so a failed build changes nothing.
 forget_permits() {
-  local folder file app prefix
+  local folder file app prefix index=0
   prefix="$(config_value FIXKEY_BUNDLE_ID_PREFIX).fixkey"
-  for folder in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" "$HOME/Library/MobileDevice/Provisioning Profiles"; do
+  PERMITS_ASIDE=$(mktemp -d)
+  for folder in "$XCODE_PERMITS" "$DEVICE_PERMITS"; do
+    index=$((index + 1))
     for file in "$folder"/*.mobileprovision; do
       [ -f "$file" ] || continue
       app=$(security cms -D -i "$file" 2>/dev/null | python3 -I -c '
@@ -741,9 +761,21 @@ try:
     print(plistlib.loads(sys.stdin.buffer.read())["Entitlements"]["application-identifier"].split(".", 1)[1])
 except Exception:
     pass')
-      case "$app" in "$prefix" | "$prefix.keyboard") rm -f "$file" ;; esac
+      case "$app" in "$prefix" | "$prefix.keyboard") mkdir -p "$PERMITS_ASIDE/$index" && mv "$file" "$PERMITS_ASIDE/$index/" ;; esac
     done
   done
+}
+
+put_back_permits() {
+  local folder file index=0
+  [ -n "${PERMITS_ASIDE:-}" ] && [ -d "$PERMITS_ASIDE" ] || return 0
+  for folder in "$XCODE_PERMITS" "$DEVICE_PERMITS"; do
+    index=$((index + 1))
+    for file in "$PERMITS_ASIDE/$index"/*.mobileprovision; do
+      [ -f "$file" ] && mv -n "$file" "$folder/"
+    done
+  done
+  rm -rf "$PERMITS_ASIDE"
 }
 
 build_app() {
@@ -751,9 +783,11 @@ build_app() {
   info "Building Fixkey for $PHONE. The first time takes a few minutes." "Bygger Fixkey til $PHONE. Første gang tager det et par minutter."
   if ! with_dots build/install.log xcodebuild -project Fixkey.xcodeproj -scheme Fixkey -configuration Release \
     -destination "id=$UDID" -derivedDataPath "$BUILD_DIR" -allowProvisioningUpdates -allowProvisioningDeviceRegistration build; then
+    put_back_permits
     explain_failure build/install.log
     return 1
   fi
+  rm -rf "$PERMITS_ASIDE"
   ok "Built Fixkey $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist" 2>/dev/null)" \
     "Byggede Fixkey $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist" 2>/dev/null)"
 }
@@ -1007,6 +1041,8 @@ except Exception:
   [ -n "$seconds" ] || return 0
   private_support_dir
   echo "$seconds" >"$SUPPORT_DIR/expiry"
+  [ -n "${UDID:-}" ] && echo "$UDID" >"$SUPPORT_DIR/iphone"
+  return 0
 }
 
 # A downloaded Fixkey folder is quarantined, so macOS would also block Reinstall Fixkey.command the first time.
@@ -1015,10 +1051,20 @@ allow_reinstall_file() {
   xattr -d com.apple.quarantine "Reinstall Fixkey.command" 2>/dev/null || true
 }
 
+# Renewing runs in the background, which macOS keeps out of Downloads and Documents, so it builds from this copy
+# of what the build needs: your settings, key and certificate included, readable only by you.
+copy_source() {
+  private_support_dir
+  mkdir -p "$SOURCE_DIR"
+  rsync -a --delete --exclude /build/ --exclude /.git/ --exclude /docs/ --exclude xcuserdata/ ./ "$SOURCE_DIR/" &&
+    chmod 700 "$SOURCE_DIR"
+}
+
 write_reminder_files() {
   private_support_dir
   cp Tools/reminder/remind.sh "$SUPPORT_DIR/remind.sh"
   printf 'REPO=%s\nLANGUAGE=%s\n' "$PWD" "$LANG_CODE" >"$SUPPORT_DIR/reminder.conf"
+  copy_source
 }
 
 reminder_on() {
@@ -1029,28 +1075,41 @@ reminder_on() {
     fail "macOS didn't accept the reminder." "macOS godtog ikke påmindelsen."
     return 1
   fi
-  ok "Fixkey reminds you the day before the 7 days end, and again when they have" \
-    "Fixkey påminder dig dagen før de 7 dage slutter, og igen når de er gået"
+  ok "Fixkey renews itself over Wi-Fi when 2 days are left, and reminds you if it can't" \
+    "Fixkey fornyer sig selv over Wi-Fi, når der er 2 dage tilbage, og minder dig om det, hvis den ikke kan"
 }
 
 reminder_off() {
   remove_agent "$REMINDER_AGENT"
-  rm -f "$SUPPORT_DIR/remind.sh" "$SUPPORT_DIR/reminder.conf" "$SUPPORT_DIR/reminder.state" "$SUPPORT_DIR/Reinstall Fixkey.command"
-  ok "No more reminders." "Ingen flere påmindelser."
+  rm -f "$SUPPORT_DIR/remind.sh" "$SUPPORT_DIR/reminder.conf" "$SUPPORT_DIR/reminder.state" "$SUPPORT_DIR/Reinstall Fixkey.command" \
+    "$SUPPORT_DIR/renew.last" "$SUPPORT_DIR/renew.result"
+  rm -rf "$SOURCE_DIR" "$CACHE_DIR"
+  ok "Fixkey no longer renews itself or reminds you." "Fixkey fornyer sig ikke længere selv og minder dig ikke om det."
 }
 
 refresh_reminder() {
+  # Renewing from the copy changes nothing about the copy or the folder it came from.
+  [ "$PWD" = "$SOURCE_DIR" ] && return 0
   agent_installed "$REMINDER_AGENT" && write_reminder_files
   return 0
 }
 
 check_reminder() {
   if agent_installed "$REMINDER_AGENT"; then
-    ok "The 7-day reminder is on" "Påmindelsen om de 7 dage er slået til"
-    [ "$(sed -n 's/^REPO=//p' "$SUPPORT_DIR/reminder.conf" 2>/dev/null)" = "$PWD" ] ||
-      note "This folder moved since the reminder was set up. Run ./fixkey reminder on" "Mappen er flyttet, siden påmindelsen blev sat op. Kør ./fixkey reminder on"
+    ok "Fixkey renews itself over Wi-Fi when 2 days are left, and reminds you if it can't" \
+      "Fixkey fornyer sig selv over Wi-Fi, når der er 2 dage tilbage, og minder dig om det, hvis den ikke kan"
+    [ "$(sed -n 's/^REPO=//p' "$SUPPORT_DIR/reminder.conf" 2>/dev/null)" = "$PWD" ] && [ -x "$SOURCE_DIR/fixkey" ] ||
+      note "This folder moved, or a newer version came, since renewing was set up. Run ./fixkey reminder on" \
+        "Mappen er flyttet, eller en nyere udgave er kommet, siden fornyelsen blev sat op. Kør ./fixkey reminder on"
+    case "$(cat "$SUPPORT_DIR/renew.result" 2>/dev/null)" in
+      signin*)
+        fail "The last renewal needs Xcode's sign-in to your Apple ID." "Den seneste fornyelse kræver, at Xcode logger ind med dit Apple-id igen."
+        hint "Open Xcode › Settings › Apple Accounts and sign in again." "Åbn Xcode › Settings › Apple Accounts, og log ind igen." ;;
+      failed*)
+        note "The last renewal didn't work. See $LOG_DIR/renew.log" "Den seneste fornyelse virkede ikke. Se $LOG_DIR/renew.log" ;;
+    esac
   else
-    note "No 7-day reminder. Turn it on with ./fixkey reminder on" "Ingen påmindelse om de 7 dage. Slå den til med ./fixkey reminder on"
+    note "Fixkey doesn't renew itself. Turn that on with ./fixkey reminder on" "Fixkey fornyer sig ikke selv. Slå det til med ./fixkey reminder on"
   fi
 }
 
@@ -1114,6 +1173,7 @@ cmd_configure() {
   title "Your settings" "Dine indstillinger"
   configure || return 1
   refresh_autostart
+  refresh_reminder
   if [ "$CONFIG_CHANGED" = 1 ]; then
     note "Settings changed: run ./fixkey reinstall to put them on the iPhone." "Indstillingerne er ændret: kør ./fixkey reinstall for at få dem på iPhonen."
   fi
@@ -1131,11 +1191,48 @@ cmd_install() {
   allow_reinstall_file
   refresh_reminder
   refresh_autostart
-  if ! launch_app; then
-    interactive || return 1
-    require launch_app
-  fi
+  # Installed and renewed already; only opening Fixkey needs an unlocked iPhone.
+  launch_app || ! interactive || require launch_app
   show_expiry
+}
+
+# Renewing by itself, for the reminder: build and install with no one at the keyboard. The exit code tells
+# remind.sh what happened: 0 renewed, 3 the iPhone can't be reached now (try later), 4 Xcode needs the Apple ID
+# again, 1 anything else.
+cmd_renew() {
+  local status
+  ASSUME_YES=1
+  DEVICE_ARG=${DEVICE_ARG:-$(cat "$SUPPORT_DIR/iphone" 2>/dev/null)}
+  title "Renewing Fixkey on the iPhone over Wi-Fi, $(date '+%Y-%m-%d %H:%M')" "Fornyer Fixkey på iPhonen over Wi-Fi, $(date '+%Y-%m-%d %H:%M')"
+  if ! check_config; then
+    status=1
+  elif ! find_iphone; then
+    status=3
+  elif ! build_app; then
+    status=$(failure_status build/install.log)
+  elif ! install_app; then
+    status=$(failure_status build/install-device.log)
+  else
+    status=0
+    record_expiry
+    # A locked iPhone can't open apps; Fixkey is renewed anyway.
+    launch_app >/dev/null 2>&1 || true
+    show_expiry
+  fi
+  private_support_dir
+  case "$status" in 0) echo ok ;; 3) echo later ;; 4) echo signin ;; *) echo failed ;; esac >"$SUPPORT_DIR/renew.result"
+  return "$status"
+}
+
+# What a failed build or install means for renewing (see cmd_renew).
+failure_status() {
+  if grep -qiE "$SIGN_IN_ERRORS" "$1"; then
+    echo 4
+  elif grep -qiE "$UNREACHABLE_ERRORS|$LOCKED_ERRORS" "$1"; then
+    echo 3
+  else
+    echo 1
+  fi
 }
 
 cmd_relay() {
@@ -1227,10 +1324,12 @@ cmd_setup() {
     ok "Your first check worked" "Dit første tjek virkede"
   fi
 
-  title "8. A reminder every 7 days" "8. En påmindelse hver 7. dag"
-  info "With a free Apple ID, Fixkey stops opening after 7 days until you reinstall it." \
-    "Med et gratis Apple-id holder Fixkey op med at åbne efter 7 dage, til du geninstallerer den."
-  if ask_yes "Remind you when that happens (recommended)?" "Påmind dig, når det sker (anbefales)?" y; then
+  title "8. Every 7 days" "8. Hver 7. dag"
+  info "With a free Apple ID, Fixkey stops opening after 7 days unless it's reinstalled. This Mac can do that by itself" \
+    "Med et gratis Apple-id holder Fixkey op med at åbne efter 7 dage, medmindre den geninstalleres. Denne Mac kan selv gøre det"
+  info "over Wi-Fi when 2 days are left, while the iPhone is on the same network, and remind you if it can't." \
+    "over Wi-Fi, når der er 2 dage tilbage, mens iPhonen er på samme netværk, og minde dig om det, hvis den ikke kan."
+  if ask_yes "Renew Fixkey by itself (recommended)?" "Forny Fixkey af sig selv (anbefales)?" y; then
     reminder_on
   fi
 
@@ -1244,8 +1343,13 @@ cmd_setup() {
     info "• Each time you want to use Fixkey: open Llama.app, then run ./fixkey relay in this folder." \
       "• Hver gang du vil bruge Fixkey: åbn Llama.app, og kør ./fixkey relay i denne mappe."
   fi
-  info "• Every 7 days (free Apple ID): connect the iPhone and double-click Reinstall Fixkey.command. Each reinstall gives 7 new days." \
-    "• Hver 7. dag (gratis Apple-id): forbind iPhonen, og dobbeltklik på Reinstall Fixkey.command. Hver geninstallation giver 7 nye dage."
+  if agent_installed "$REMINDER_AGENT"; then
+    info "• Every 7 days (free Apple ID): Fixkey renews itself over Wi-Fi. If it can't, it tells you what to do." \
+      "• Hver 7. dag (gratis Apple-id): Fixkey fornyer sig selv over Wi-Fi. Kan den ikke det, siger den, hvad du skal gøre."
+  else
+    info "• Every 7 days (free Apple ID): connect the iPhone and double-click Reinstall Fixkey.command. Each reinstall gives 7 new days." \
+      "• Hver 7. dag (gratis Apple-id): forbind iPhonen, og dobbeltklik på Reinstall Fixkey.command. Hver geninstallation giver 7 nye dage."
+  fi
   info "• If something stops working: ./fixkey doctor. Questions: docs/en/faq.md" \
     "• Hvis noget holder op med at virke: ./fixkey doctor. Spørgsmål: docs/da/faq.md"
   if ! agent_installed "$RELAY_AGENT" && interactive &&
@@ -1292,15 +1396,15 @@ cmd_reminder() {
 
 cmd_uninstall() {
   title "Remove Fixkey from this Mac" "Fjern Fixkey fra denne Mac"
-  info "This removes the relay that starts by itself, the reminder, and their files and logs." \
-    "Dette fjerner relæet, der starter af sig selv, påmindelsen og deres filer og logs."
+  info "This removes the relay that starts by itself, the renewing and reminder, and their files, builds and logs." \
+    "Dette fjerner relæet, der starter af sig selv, fornyelsen og påmindelsen og deres filer, builds og logs."
   info "This folder, Llama.app, the model and the app on the iPhone stay." \
     "Denne mappe, Llama.app, modellen og appen på iPhonen bliver."
   ask_yes "Continue?" "Fortsæt?" y || return 0
   remove_agent "$RELAY_AGENT"
   remove_agent "$REMINDER_AGENT"
   pkill -f "lan-relay/relay.py" 2>/dev/null
-  rm -rf "$SUPPORT_DIR" "$LOG_DIR"
+  rm -rf "$SUPPORT_DIR" "$CACHE_DIR" "$LOG_DIR"
   ok "Removed what Fixkey set up on this Mac." "Fjernede det, Fixkey satte op på denne Mac."
   info "To remove the rest: delete the app on the iPhone (touch and hold › Remove App), this folder, and the model in Llama.app." \
     "Resten fjerner du sådan: slet appen på iPhonen (hold på den › Fjern app), denne mappe og modellen i Llama.app."
@@ -1320,9 +1424,9 @@ cmd_menu() {
     auto_choice=$(t "Start the relay by itself when I log in" "Start relæet af sig selv, når jeg logger ind")
   fi
   if agent_installed "$REMINDER_AGENT"; then
-    reminder_choice=$(t "Turn the 7-day reminder off" "Slå påmindelsen om de 7 dage fra")
+    reminder_choice=$(t "Stop renewing by itself" "Stop med at forny af sig selv")
   else
-    reminder_choice=$(t "Remind me when the 7 days are over" "Påmind mig, når de 7 dage er gået")
+    reminder_choice=$(t "Renew by itself over Wi-Fi every 7 days" "Forny af sig selv over Wi-Fi hver 7. dag")
   fi
   title "Fixkey" "Fixkey"
   printf '  1) %s\n' "$(t "Reinstall on the iPhone (every 7 days)" "Geninstaller på iPhonen (hver 7. dag)")"
@@ -1362,6 +1466,7 @@ case "$COMMAND" in
   test) cmd_test ;;
   autostart) cmd_autostart ;;
   reminder) cmd_reminder ;;
+  renew) cmd_renew ;;
   uninstall) cmd_uninstall ;;
   help) cmd_help ;;
   *) echo "Unknown command: $COMMAND (see ./fixkey help)" >&2; exit 2 ;;

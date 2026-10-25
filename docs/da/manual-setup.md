@@ -36,7 +36,7 @@ Tools/proofread-cli/run.sh "jeg har ikke mye tid idag"
 # OUT: Jeg har ikke meget tid i dag.
 ```
 
-En anden model virker på samme måde: hent den med dens eget navn, `ejer/repo:KVANT`, og skriv navnet i `FIXKEY_MODEL` (nedenfor). `./fixkey model evaluate <navn>` giver den point ved siden af den anbefalede models 45/53.
+En anden model virker på samme måde: hent den med dens eget navn, `ejer/repo:KVANT`, og skriv navnet i `FIXKEY_MODEL` (nedenfor). `./fixkey model evaluate <navn>` giver den point ved siden af den anbefalede models 50/53.
 
 ## 2. Nøgle, certifikat og indstillinger
 
@@ -114,6 +114,6 @@ På iPhonen:
 
 - **Nyt Mac-navn, ny nøgle eller nyt certifikat:** kør `./fixkey configure` og derefter `./fixkey reinstall`. Vil du have en ny nøgle, så slet først `key.txt`; for et nyt certifikat sletter du `relay-key.pem`.
 - **En anden model:** `./fixkey model`, eller ret `FIXKEY_MODEL`, og genstart relæet.
-- **Hver 7. dag** med et gratis Apple-id: `./fixkey reinstall`, eller dobbeltklik på `Reinstall Fixkey.command`. Den sletter først Fixkeys gemte provisioneringsprofiler, så hver geninstallation giver 7 dage fra det øjeblik; et almindeligt **Run** i Xcode genbruger den gemte profil, til den udløber. `./fixkey reminder on` minder dig om det dagen før.
+- **Hver 7. dag** med et gratis Apple-id: `./fixkey reinstall`, eller dobbeltklik på `Reinstall Fixkey.command`. Den lægger først Fixkeys gemte provisioneringsprofiler til side (og lægger dem tilbage, hvis builden fejler), så hver geninstallation giver 7 dage fra det øjeblik; et almindeligt **Run** i Xcode genbruger den gemte profil, til den udløber. `./fixkey reminder on` lader Macen gøre det selv over Wi-Fi fra 2 dage før slutningen og minder dig om det, når den ikke kan.
 
 Problemer: kør `./fixkey doctor`, og se [spørgsmål og svar](faq.md#når-noget-ikke-virker).

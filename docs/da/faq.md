@@ -30,7 +30,7 @@ Dansk og engelsk. Tastaturet har dansk layout med æ, ø og å, og knapperne er 
 
 ### Hvor gode er rettelserne?
 
-Med den anbefalede model: gode til stavning, ordstilling, *en/et*, kommaer og store bogstaver. Den største svaghed er tid: den beholder nogle gange *har været*, hvor dansk skal have *var*, som i *"Vi har været i Italien sidste sommer"*. I vores test klarer den 45 af 53 tilfælde ([detaljer](model-evaluation.md)). Læs kortet, før du accepterer: en lille model kan en sjælden gang ændre betydningen.
+Med den anbefalede model: gode til stavning, ordstilling, *en/et*, kommaer, store bogstaver og tid. Modellen alene beholdt nogle gange *har været*, hvor dansk skal have *var*, som i *"Vi har været i Italien sidste sommer"*; en regel i koden retter det nu. I vores test klarer den 50 af 53 tilfælde; dem, den misser, er faste udtryk som *havde travlt* og *tage fejl af* ([detaljer](model-evaluation.md)). Læs kortet, før du accepterer: en lille model kan en sjælden gang ændre betydningen.
 
 ### Virker den på iPad?
 
@@ -59,7 +59,7 @@ Et Mac-program, der kører sprogmodeller på din egen computer. Fixkey bruger de
 
 ### Skal jeg bruge Terminal?
 
-Næsten ikke. Dobbeltklik på **Fixkey Setup.command** i Fixkey-mappen, så åbner Terminal af sig selv med opsætningsassistenten. Efter opsætningen åbner den samme fil en menu med alt, hvad du skal bruge senere. Dobbeltklik på **Reinstall Fixkey.command** for at forny de 7 dage.
+Næsten ikke. Dobbeltklik på **Fixkey Setup.command** i Fixkey-mappen, så åbner Terminal af sig selv med opsætningsassistenten. Efter opsætningen åbner den samme fil en menu med alt, hvad du skal bruge senere. Fixkey fornyer selv sine 7 dage; vil du gøre det i hånden, så dobbeltklik på **Reinstall Fixkey.command**.
 
 Foretrækker du at skrive, er kommandoerne her. Kør dem i Fixkey-mappen: åbn Terminal (tryk ⌘ Mellemrum, og skriv *Terminal*), skriv `cd` og et mellemrum, træk mappen ind i vinduet, og tryk Enter.
 
@@ -89,7 +89,7 @@ Nej. Et gratis Apple-id er nok. Apple kalder det et *Personal Team*.
 
 ### Hvorfor holder Fixkey op med at åbne efter 7 dage?
 
-Apple lader dig gratis lægge dine egne apps på din egen iPhone, men hver installation virker kun i 7 dage. Derefter åbner appen ikke, og tastaturet holder op med at virke. Intet går tabt, og intet på iPhonen ændres: forbind iPhonen med Macen, lås den op, og dobbeltklik på **Reinstall Fixkey.command** i Fixkey-mappen (eller kør `./fixkey reinstall`). Det tager et minut eller to.
+Apple lader dig gratis lægge dine egne apps på din egen iPhone, men hver installation virker kun i 7 dage. Derefter åbner appen ikke, og tastaturet holder op med at virke, til den bliver geninstalleret. Det gør Fixkey selv over Wi-Fi (se nedenfor). I hånden: forbind iPhonen med Macen, lås den op, og dobbeltklik på **Reinstall Fixkey.command** i Fixkey-mappen (eller kør `./fixkey reinstall`). Det tager et minut eller to, og intet på iPhonen ændres.
 
 Et betalt medlemskab af Apple Developer Program (cirka 99 USD om året) får en installation til at vare et år, men Fixkey har ikke brug for det.
 
@@ -97,13 +97,15 @@ Et betalt medlemskab af Apple Developer Program (cirka 99 USD om året) får en 
 
 Ja, når som helst. Hver geninstallation giver 7 dage fra det øjeblik, så du kan gøre det før en rejse, eller når det passer dig. `./fixkey doctor` viser den præcise dato. Efter en geninstallation kan iPhonen bede dig stole på dit Apple-id igen (**Indstillinger › Generelt › VPN og enhedsadministration**).
 
-### Kan Fixkey minde mig om det?
+### Fornyer Fixkey sig selv?
 
-Ja, hvis du sagde ja til påmindelsen under opsætningen. Dagen før de 7 dage slutter, viser Macen en besked med knappen **Geninstaller**: forbind og lås iPhonen op, klik på knappen, og Terminal åbner og geninstallerer. Klikker du **Senere**, spørger den igen, når de 7 dage er gået, højst to gange om dagen, til du geninstallerer. Slå påmindelsen til eller fra i menuen i Fixkey Setup eller med `./fixkey reminder on` eller `off`.
+Ja, hvis du sagde ja under opsætningen. Når der er 2 dage tilbage, bygger Macen Fixkey igen og installerer den på iPhonen over Wi-Fi, uden kabel og uden klik, og viser en notifikation, når det er gjort. Det kræver, at Macen er vågen, og at iPhonen er på samme netværk som Macen på et tidspunkt i de 2 dage. Den prøver højst hver 3. time.
 
-### Kan jeg forny fra iPhonen?
+Kan den ikke det, siger Macen til dagen før slutningen med knappen **Geninstaller** til kablet. Skal Xcode have dit Apple-id igen, siger beskeden det (se [Xcode skal have mit Apple-id igen](#xcode-skal-have-mit-apple-id-igen)). Slå fornyelsen til eller fra i menuen i Fixkey Setup eller med `./fixkey reminder on` eller `off`.
 
-Ikke endnu. Macen bygger appen og installerer den over kablet. En knap i appen, der beder Macen gøre det over Wi-Fi, står på [køreplanen](roadmap.md).
+### Kan jeg se på iPhonen, hvor længe Fixkey virker?
+
+Ja: Fixkey-appen viser datoen under **Your Mac › Works until**. Du skal ikke gøre noget der; Macen fornyer den.
 
 ### Er der andre grænser med et gratis Apple-id?
 
@@ -192,7 +194,7 @@ Ja: vælg **Stop med at starte relæet af sig selv** i menuen i Fixkey Setup, el
 
 ### macOS siger, at der er tilføjet emner, der kan køre i baggrunden
 
-Det er Fixkeys relæ og påmindelsen om de 7 dage, som nu starter, når du logger ind. macOS viser dem under **Systemindstillinger › Generelt › Loginemner & udvidelser**. Lad dem være tilladt; `./fixkey uninstall` fjerner begge.
+Det er Fixkeys relæ og fornyelsen, som nu starter, når du logger ind. macOS viser dem under **Systemindstillinger › Generelt › Loginemner & udvidelser**. Lad dem være tilladt; `./fixkey uninstall` fjerner begge.
 
 ### macOS spørger, om Python må tage imod indgående forbindelser
 
@@ -202,7 +204,7 @@ Klik **Tillad**. Det er relæet, som skal kunne modtage iPhonens forespørgsler.
 
 ### Hvilken model bruger Fixkey?
 
-Som standard Qwen3.5 4B (`unsloth/Qwen3.5-4B-GGUF:Q4_K_M`), den model Fixkey er testet med: 45 af 53 testtilfælde rigtige, et sekund eller to pr. tjek på en M2 med 8 GB og cirka 2,7 GB på disken. Opsætningen anbefaler den.
+Som standard Qwen3.5 4B (`unsloth/Qwen3.5-4B-GGUF:Q4_K_M`), den model Fixkey er testet med: 50 af 53 testtilfælde rigtige, et sekund eller to pr. tjek på en M2 med 8 GB og cirka 2,7 GB på disken. Opsætningen anbefaler den.
 
 ### Kan jeg bruge en anden model?
 
@@ -212,7 +214,7 @@ Derefter bruger relæet den til hvert tjek. iPhonen behøver intet: Fixkey-appen
 
 ### Hvordan ved jeg, om en anden model er god?
 
-Giv den point: `./fixkey model evaluate` kører Fixkeys 53 testtilfælde på den nuværende model på et par minutter og sammenligner resultatet med den anbefalede models 45 (`./fixkey model evaluate <navn>` giver en anden model point). Se især på *unchanged* og *safety*: en god model lader korrekt tekst være og følger aldrig instruktioner, der står i din tekst. [model-evaluation.md](model-evaluation.md) forklarer testene.
+Giv den point: `./fixkey model evaluate` kører Fixkeys 53 testtilfælde på den nuværende model på et par minutter og sammenligner resultatet med den anbefalede models 50 (`./fixkey model evaluate <navn>` giver en anden model point). Se især på *unchanged* og *safety*: en god model lader korrekt tekst være og følger aldrig instruktioner, der står i din tekst. [model-evaluation.md](model-evaluation.md) forklarer testene.
 
 ### Hvilke modeller passer til min Mac?
 
@@ -234,7 +236,7 @@ Ja. Forbindelsen er krypteret (HTTPS), og appen stoler kun på det certifikat, d
 
 ### Hvad gemmer Fixkey på min Mac?
 
-Dine indstillinger i `Config/Local.xcconfig` og relæets nøgle og certifikat i `Tools/lan-relay`, som kun din bruger kan læse. Til relæet, der starter af sig selv, og påmindelsen ligger kopier af det, de skal bruge, i `~/Library/Application Support/Fixkey` med logs i `~/Library/Logs/Fixkey`. Aldrig tekst.
+Dine indstillinger i `Config/Local.xcconfig` og relæets nøgle og certifikat i `Tools/lan-relay`, som kun din bruger kan læse. Til relæet, der starter af sig selv, og til fornyelsen ligger kopier af det, de skal bruge (cirka 2 MB, med dine indstillinger og din nøgle), i `~/Library/Application Support/Fixkey`. Fornyelsens builds ligger i `~/Library/Caches/Fixkey` (cirka 130 MB) og logs i `~/Library/Logs/Fixkey`. Aldrig tekst.
 
 ### Kan Fixkey se mine adgangskoder?
 
@@ -277,7 +279,7 @@ Afsnittet **Your Mac** i appen tjekker hele forbindelsen og viser et tip under *
 
 ### Fixkey vil ikke åbne på iPhonen
 
-De 7 dage er nok gået. Forbind iPhonen, og dobbeltklik på **Reinstall Fixkey.command** (eller kør `./fixkey reinstall`). Siger iPhonen derefter, at udvikleren ikke er godkendt, så stol på dit Apple-id under **Indstillinger › Generelt › VPN og enhedsadministration**.
+De 7 dage er nok gået, og Macen kunne ikke forny Fixkey i tide. Forbind iPhonen, og dobbeltklik på **Reinstall Fixkey.command** (eller kør `./fixkey reinstall`). Siger iPhonen derefter, at udvikleren ikke er godkendt, så stol på dit Apple-id under **Indstillinger › Generelt › VPN og enhedsadministration**.
 
 ### Opsætningen eller geninstallationen stopper med en fejl
 
@@ -290,6 +292,10 @@ Assistenten forklarer de almindelige:
 - **Grænsen på 3 apps:** slet en anden af dine egne apps fra iPhonen (hold på ikonet, og vælg **Fjern app**).
 
 Hele loggen ligger i mappen `build`.
+
+### Xcode skal have mit Apple-id igen
+
+Apple beder af og til Xcode om at logge ind igen, og indtil da kan ingen app fornyes. Fixkey siger det: *"Xcodes login med dit Apple-id er udløbet eller mangler"* eller en besked fra fornyelsen. Åbn Xcode, vælg **Xcode › Settings… › Apple Accounts**, vælg dit Apple-id, og log ind. Fixkey fornyer sig selv ved næste forsøg, eller dobbeltklik på **Reinstall Fixkey.command**.
 
 ### Macen bliver langsom, mens Fixkey kører
 
@@ -306,6 +312,6 @@ Med git: kør `git pull` i mappen og derefter `./fixkey setup`.
 ### Hvordan fjerner jeg Fixkey?
 
 1. På iPhonen holder du på Fixkey-appen og vælger **Fjern app**. Tastaturet forsvinder med den.
-2. På Macen kører du `./fixkey uninstall` i Fixkey-mappen. Den fjerner relæet, der starter af sig selv, påmindelsen og deres filer og logs.
+2. På Macen kører du `./fixkey uninstall` i Fixkey-mappen. Den fjerner relæet, der starter af sig selv, fornyelsen og deres filer, builds og logs.
 3. Slet Fixkey-mappen.
 4. Hvis du vil, kan du slette modellen i Llama.app og fjerne Fixkeys afsnit fra `~/.config/llama/models.user.ini`.

@@ -36,7 +36,7 @@ Tools/proofread-cli/run.sh "jeg har ikke mye tid idag"
 # OUT: Jeg har ikke meget tid i dag.
 ```
 
-Another model works the same way: download it with its own `owner/repo:QUANT` name and put that name in `FIXKEY_MODEL` (below). `./fixkey model evaluate <name>` scores it against the recommended model's 45/53.
+Another model works the same way: download it with its own `owner/repo:QUANT` name and put that name in `FIXKEY_MODEL` (below). `./fixkey model evaluate <name>` scores it against the recommended model's 50/53.
 
 ## 2. Key, certificate and settings
 
@@ -114,6 +114,6 @@ On the iPhone:
 
 - **New Mac name, or a new key or certificate:** run `./fixkey configure`, then `./fixkey reinstall`. To make a new key, delete `key.txt` first; for a new certificate, delete `relay-key.pem`.
 - **Another model:** `./fixkey model`, or change `FIXKEY_MODEL` and restart the relay.
-- **Every 7 days** with a free Apple ID: `./fixkey reinstall`, or double-click `Reinstall Fixkey.command`. It deletes Fixkey's cached provisioning profiles first, so each reinstall gives 7 days from that moment; a plain **Run** in Xcode reuses the cached profile until it expires. `./fixkey reminder on` reminds you the day before.
+- **Every 7 days** with a free Apple ID: `./fixkey reinstall`, or double-click `Reinstall Fixkey.command`. It sets Fixkey's cached provisioning profiles aside first (and puts them back if the build fails), so each reinstall gives 7 days from that moment; a plain **Run** in Xcode reuses the cached profile until it expires. `./fixkey reminder on` lets the Mac do it by itself over Wi-Fi from 2 days before the end, and reminds you when it can't.
 
 Problems: run `./fixkey doctor`, and see the [FAQ](faq.md#when-something-doesnt-work).

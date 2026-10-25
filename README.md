@@ -17,9 +17,9 @@ It works like Grammarly's keyboard. Type as usual, tap the Fixkey icon above the
 - **Grammar and spelling checks on demand.** Fixkey only checks when you tap its icon, so it never slows down typing or sends text you didn't ask it to.
 - **Choose your changes.** Tap a change in the card to keep your own words there. Accept applies the rest.
 - **Local model, your choice.** By default Qwen3.5 4B (4-bit) in [Llama.app](https://llama.app) on the Mac, tested on 53 cases; a check takes a second or two. You can switch to any model Llama.app runs, and score it on the same tests.
-- **Set up without a developer.** Double-click the setup assistant; it asks a few questions and does the rest. Afterwards the relay starts by itself on the Wi-Fi networks you allow, and when the free Apple ID's 7 days run out, a reminder offers a one-click reinstall.
+- **Set up without a developer.** Double-click the setup assistant; it asks a few questions and does the rest. Afterwards the relay starts by itself on the Wi-Fi networks you allow, and Fixkey renews itself over Wi-Fi before the free Apple ID's 7 days run out.
 - **Encrypted and locked to your Mac.** The connection to the Mac is encrypted, the app talks only to the Mac it was set up with, and the relay listens only on Wi-Fi networks you allowed.
-- **Guardrails in code.** A small model sometimes answers a question, translates, or rewrites instead of correcting. Fixkey checks every reply against rules in code and drops anything that isn't a correction of your text.
+- **Guardrails in code.** A small model sometimes answers a question, translates, or rewrites instead of correcting. Fixkey checks every reply against rules in code and drops anything that isn't a correction of your text. Another rule fixes the model's most common Danish mistake: "har" + participle with a time in the past (*har været … i går* becomes *var … i går*).
 - **Full Danish keyboard.** The layout includes æ, ø and å. Key sizes, gaps and colours were measured from Apple's keyboard.
 - **Typing aids.** Word suggestions and autocorrect with undo, long-press accents, space-bar cursor control, word delete on a long backspace hold, double-space full stop and your iOS text replacements.
 - **No vibration.** Only the normal key click, which follows your iPhone's Keyboard Clicks setting.
@@ -28,7 +28,7 @@ It works like Grammarly's keyboard. Type as usual, tap the Fixkey icon above the
 
 **[SETUP.md](SETUP.md)** walks you through everything, no programming needed. In short: install Xcode and Llama.app, download Fixkey, and double-click **Fixkey Setup.command** in its folder (or run `./fixkey setup` in Terminal).
 
-The setup assistant asks a few questions, downloads the model, builds the app, installs it on your iPhone and checks that everything works. Every 7 days, double-click **Reinstall Fixkey.command** with the iPhone connected. You can also let an AI assistant (Claude Code, Codex, Cursor) run the setup with you; SETUP.md has instructions for it.
+The setup assistant asks a few questions, downloads the model, builds the app, installs it on your iPhone and checks that everything works. Every 7 days Fixkey renews itself over Wi-Fi; if it can't, it tells you, and **Reinstall Fixkey.command** does it over the cable. You can also let an AI assistant (Claude Code, Codex, Cursor) run the setup with you; SETUP.md has instructions for it.
 
 Questions about Xcode, the free Apple ID, the 7-day limit, privacy or problems: see the **[FAQ](docs/en/faq.md)**.
 
@@ -62,7 +62,7 @@ Llama.app only accepts connections from the Mac itself. A small relay (`Tools/la
 
 ## Status
 
-Fixkey 0.4 is a working prototype for personal use. It is tested on an iPhone and an M2 MacBook Pro with 8 GB, and it isn't on the App Store. The phone reaches the Mac on the same Wi-Fi network, or over the iPhone's Personal Hotspot. With the recommended model it gets 45 of 53 test cases right; the misses are listed in [model-evaluation.md](docs/en/model-evaluation.md).
+Fixkey 0.4 is a working prototype for personal use. It is tested on an iPhone and an M2 MacBook Pro with 8 GB, and it isn't on the App Store. The phone reaches the Mac on the same Wi-Fi network, or over the iPhone's Personal Hotspot. With the recommended model it gets 50 of 53 test cases right; the misses are listed in [model-evaluation.md](docs/en/model-evaluation.md).
 
 ## License
 

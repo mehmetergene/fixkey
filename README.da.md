@@ -17,9 +17,9 @@ Det fungerer som Grammarlys tastatur. Skriv som du plejer, tryk på Fixkey-ikone
 - **Tjek af grammatik og stavning, når du beder om det.** Fixkey tjekker kun, når du trykker på ikonet, så det aldrig gør skrivningen langsommere eller sender tekst, du ikke har bedt om.
 - **Vælg dine ændringer.** Tryk på en ændring i kortet for at beholde dine egne ord der. Accepter bruger resten.
 - **Lokal model, dit valg.** Som standard Qwen3.5 4B (4-bit) i [Llama.app](https://llama.app) på Macen, testet på 53 tilfælde; et tjek tager et sekund eller to. Du kan skifte til enhver model, Llama.app kan køre, og give den point på de samme test.
-- **Sæt op uden at være udvikler.** Dobbeltklik på opsætningsassistenten; den stiller et par spørgsmål og klarer resten. Bagefter starter relæet af sig selv på de Wi-Fi-netværk, du tillader, og når det gratis Apple-id's 7 dage er gået, tilbyder en påmindelse at geninstallere med ét klik.
+- **Sæt op uden at være udvikler.** Dobbeltklik på opsætningsassistenten; den stiller et par spørgsmål og klarer resten. Bagefter starter relæet af sig selv på de Wi-Fi-netværk, du tillader, og Fixkey fornyer sig selv over Wi-Fi, før det gratis Apple-id's 7 dage er gået.
 - **Krypteret og låst til din Mac.** Forbindelsen til Macen er krypteret, appen taler kun med den Mac, den blev sat op med, og relæet lytter kun på Wi-Fi-netværk, du har tilladt.
-- **Sikkerhedsregler i koden.** En lille model svarer af og til på et spørgsmål, oversætter eller omskriver i stedet for at rette. Fixkey tjekker hvert svar mod regler i koden og kasserer alt, der ikke er en rettelse af din tekst.
+- **Sikkerhedsregler i koden.** En lille model svarer af og til på et spørgsmål, oversætter eller omskriver i stedet for at rette. Fixkey tjekker hvert svar mod regler i koden og kasserer alt, der ikke er en rettelse af din tekst. En anden regel retter modellens hyppigste danske fejl: "har" + kort tillægsform med et tidspunkt i fortiden (*har været … i går* bliver til *var … i går*).
 - **Fuldt dansk tastatur.** Layoutet har æ, ø og å. Tasternes størrelse, afstande og farver er målt på Apples tastatur.
 - **Hjælp til skrivningen.** Ordforslag og autokorrektur med fortryd, accenter ved langt tryk, markørstyring med mellemrumstasten, sletning af hele ord ved langt tryk på slet, punktum ved dobbelt mellemrum og dine iOS-teksterstatninger.
 - **Ingen vibration.** Kun det almindelige tasteklik, som følger iPhonens indstilling for tastaturfeedback.
@@ -28,7 +28,7 @@ Det fungerer som Grammarlys tastatur. Skriv som du plejer, tryk på Fixkey-ikone
 
 **[SETUP.da.md](SETUP.da.md)** tager dig igennem det hele, uden at du skal kunne programmere. Kort fortalt: installer Xcode og Llama.app, hent Fixkey, og dobbeltklik på **Fixkey Setup.command** i mappen (eller kør `./fixkey setup` i Terminal).
 
-Opsætningsassistenten stiller et par spørgsmål, henter modellen, bygger appen, installerer den på din iPhone og tjekker, at alt virker. Hver 7. dag dobbeltklikker du på **Reinstall Fixkey.command** med iPhonen forbundet. Du kan også lade en AI-assistent (Claude Code, Codex, Cursor) køre opsætningen sammen med dig; SETUP.da.md har en vejledning til den.
+Opsætningsassistenten stiller et par spørgsmål, henter modellen, bygger appen, installerer den på din iPhone og tjekker, at alt virker. Hver 7. dag fornyer Fixkey sig selv over Wi-Fi; kan den ikke det, siger den til, og **Reinstall Fixkey.command** gør det over kablet. Du kan også lade en AI-assistent (Claude Code, Codex, Cursor) køre opsætningen sammen med dig; SETUP.da.md har en vejledning til den.
 
 Spørgsmål om Xcode, det gratis Apple-id, grænsen på 7 dage, privatliv eller problemer: se **[spørgsmål og svar](docs/da/faq.md)**.
 
@@ -62,7 +62,7 @@ Llama.app tager kun imod forbindelser fra selve Macen. Et lille relæ (`Tools/la
 
 ## Status
 
-Fixkey 0.4 er en fungerende prototype til personligt brug. Den er testet på en iPhone og en MacBook Pro M2 med 8 GB, og den findes ikke i App Store. Telefonen når Macen på samme Wi-Fi-netværk eller over iPhonens internetdeling. Med den anbefalede model klarer den 45 af 53 testtilfælde; dem, den ikke klarer, står i [model-evaluation.md](docs/da/model-evaluation.md).
+Fixkey 0.4 er en fungerende prototype til personligt brug. Den er testet på en iPhone og en MacBook Pro M2 med 8 GB, og den findes ikke i App Store. Telefonen når Macen på samme Wi-Fi-netværk eller over iPhonens internetdeling. Med den anbefalede model klarer den 50 af 53 testtilfælde; dem, den ikke klarer, står i [model-evaluation.md](docs/da/model-evaluation.md).
 
 ## Licens
 

@@ -25,11 +25,16 @@ Værktøjet kører hvert tilfælde gennem tastaturets egen `Proofreader` og `Gua
 
 Alle kørsler er lavet på en MacBook Pro M2 med 8 GB, med én model indlæst ad gangen.
 
-### Version 0.4 (Qwen3.5 4B, alle 53 tilfælde)
+### Version 0.5: datidsreglen (Qwen3.5 4B, alle 53 tilfælde)
 
 | Opsætning | Score | Median | Langsomste |
 |---|---|---|---|
-| **Danske eksempler, 1 runde (valgt)** | **45/53** | **0,9 sek.** | **3,0 sek.** |
+| **Danske eksempler, 1 runde, datidsregel (valgt)** | **50/53** | **0,9 sek.** | **2,2 sek.** |
+| Danske eksempler, 1 runde (version 0.4) | 45/53 | 0,9 sek. | 3,0 sek. |
+
+Pr. kategori: dansk 13/15, engelsk 3/3, afsnit 3/3, uændret 4/4, sikkerhed 3/3, holdout 10/10, holdout-sikkerhed 5/5, holdout-2 9/10. Alle fem fejl med tid fra version 0.4 består nu, og intet, der bestod før, fejler. Reglen (`Shared/PastTense.swift`) kører på teksten før modellen og på svaret efter sikkerhedsreglerne. At den kører først, betyder noget: alene løste modellen engang konflikten ved at ændre tidspunktet i stedet for verbet (*for tre år siden* blev til *i tre år*).
+
+### Version 0.4 (Qwen3.5 4B, alle 53 tilfælde)
 
 Pr. kategori: dansk 12/15, engelsk 3/3, afsnit 3/3, uændret 4/4, sikkerhed 3/3, holdout 9/10, holdout-sikkerhed 5/5, holdout-2 6/10. De første 43 tilfælde giver 39/43, præcis som ved tuningen i oktober, så resultaterne kan gentages. De nye tilfælde bekræfter det kendte svage punkt: tre af deres fire fejl handler om tid.
 
@@ -64,20 +69,15 @@ Begge 4B-modeller fik 11/15 på dansk. Qwen vandt, fordi den aldrig ændrede tek
 
 ## Kendte fejl
 
-Disse otte tilfælde fejler med den valgte opsætning. Fem af dem er den samme fejl: *har* + kort tillægsform bliver stående, hvor et tidsudtryk for fortid (*i sidste uge*, *sidste sommer*, *for … siden*, *i fredags*) kræver datid.
+Disse tre tilfælde fejler med den valgte opsætning. Alle tre er faste udtryk:
 
 | Input | Forventet | Modellens resultat |
 |---|---|---|
 | jeg har ikke spist noget i dag fordi jeg var travl | …fordi jeg **havde travlt**. | Jeg har ikke spist noget i dag, fordi jeg var travl. |
-| De har købt en ny bil i sidste uge | De **købte** en ny bil i sidste uge. | De har købt en ny bil i sidste uge. |
 | hvor mange penger koster det | Hvor mange **penge** koster det? / Hvor meget koster det? | Hvor mange koster det? |
-| Jeg har boet her for tre år siden | Jeg **boede** her for tre år siden. | Jeg har boet her i tre år. (*for tre år siden* blev til *i tre år*, hvilket ændrer betydningen) |
-| Vi har været i Italien sidste sommer | Vi **var** i Italien sidste sommer. | Vi har været i Italien sidste sommer. |
-| Hun har startet på universitetet for to år siden | Hun **startede** på universitetet for to år siden. | Hun har startet på universitetet for to år siden. |
-| Vi har spist på en ny restaurant i fredags | Vi **spiste** på en ny restaurant i fredags. | Vi har spist på en ny restaurant i fredags. |
 | Jeg tror du har fejl med datoen | Jeg tror, du **tager fejl af** datoen. | Jeg tror, du har fejl med datoen. |
 
-Den sidste er den mest alvorlige slags fejl: en flydende sætning, der betyder noget andet. Det er en af grundene til, at Fixkey altid viser ændringerne og aldrig bruger dem af sig selv.
+Før datidsreglen fejlede fem mere: *har* + kort tillægsform blev stående, hvor et tidsudtryk for fortid (*i sidste uge*, *sidste sommer*, *for … siden*, *i fredags*) kræver datid. En af dem viser den mest alvorlige slags fejl: *Jeg har boet her for tre år siden* blev til *Jeg har boet her i tre år*, en flydende sætning, der betyder noget andet. Det er en af grundene til, at Fixkey altid viser ændringerne og aldrig bruger dem af sig selv.
 
 ## Kør testen
 
@@ -100,12 +100,12 @@ Værktøjet indlæser først modellen, så indlæsningstiden ikke tæller med. D
 
 ## Prøv en anden model
 
-Den hurtige vej: `./fixkey model` vælger eller henter den, og `./fixkey model evaluate` kører dette værktøj på den og sammenligner scoren med 45/53. I hånden:
+Den hurtige vej: `./fixkey model` vælger eller henter den, og `./fixkey model evaluate` kører dette værktøj på den og sammenligner scoren med 50/53. I hånden:
 
 1. `llama download -hf <repo>:<quant> --no-mmproj`
 2. Luk Llama.app, og åbn den igen, så kun den model kan blive indlæst.
 3. `Tools/model-eval/run.sh <repo>:<quant> <navn> nothink`
-4. Slår den 45/53, beholder den alle `unchanged`- og sikkerhedstilfælde og er den stadig hurtig, så skift til den med `./fixkey model use <repo>:<quant>`. Det sætter `FIXKEY_MODEL` på Macen, og relæet bruger den til hvert tjek, så iPhonen ikke skal have en ny build.
+4. Slår den 50/53, beholder den alle `unchanged`- og sikkerhedstilfælde og er den stadig hurtig, så skift til den med `./fixkey model use <repo>:<quant>`. Det sætter `FIXKEY_MODEL` på Macen, og relæet bruger den til hvert tjek, så iPhonen ikke skal have en ny build.
 
 Vil du ændre, hvad Fixkey anbefaler alle, så ret `RECOMMENDED_MODEL` og `RECOMMENDED_SCORE` i `fixkey`, `FixkeyConfig.recommendedModel` og `FIXKEY_MODEL` i `Config/Fixkey.xcconfig`.
 

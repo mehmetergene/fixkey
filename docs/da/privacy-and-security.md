@@ -67,17 +67,20 @@ Intet personligt eller hemmeligt er committed. `.gitignore` udelukker:
 
 Uden for repositoryet, i mapper, som kun du kan åbne:
 
-- `~/Library/Application Support/Fixkey`: til relæet, der starter af sig selv, kopier af `relay.py`, nøglen og certifikatet; `networks.txt` med de tilladte netværks hashes; til påmindelsen dens script, datoen, hvor de 7 dage slutter, og stien til Fixkey-mappen;
-- `~/Library/Logs/Fixkey`: logs fra relæet og påmindelsen, uden tekst.
+- `~/Library/Application Support/Fixkey`:
+  - til relæet, der starter af sig selv, kopier af `relay.py`, nøglen og certifikatet og `networks.txt` med de tilladte netværks hashes;
+  - til fornyelsen en kopi af Fixkey-mappen (`source`, cirka 2 MB, med dine indstillinger, din nøgle og dit certifikat), datoen, hvor de 7 dage slutter, iPhonens id og stien til Fixkey-mappen;
+- `~/Library/Caches/Fixkey`: fornyelsens builds;
+- `~/Library/Logs/Fixkey`: logs fra relæet og fornyelsen, uden tekst.
 
-`./fixkey uninstall` fjerner begge mapper og de to LaunchAgents.
+`./fixkey uninstall` fjerner disse mapper og de to LaunchAgents.
 
 ## Det, der kører i baggrunden
 
 Kun det, du siger ja til under opsætningen, som LaunchAgents i `~/Library/LaunchAgents`. Begge kører som dig, uden administratorrettigheder, fra filer, som kun du kan ændre:
 
 - `local.fixkey.relay`: relæet, startet ved login og genstartet, hvis det stopper. Det tager kun imod forbindelser på tilladte netværk, som beskrevet ovenfor, og åbner Llama.app, når et tjek har brug for den.
-- `local.fixkey.reminder`: hver 3. time sammenligner et kort script datoen, hvor de 7 dage slutter, med i dag og viser måske en dialog. Det læser kun sine egne filer og bruger aldrig netværket. Knappen **Geninstaller** åbner Terminal ved `./fixkey reinstall` i din Fixkey-mappe.
+- `local.fixkey.reminder`: hver 3. time sammenligner et kort script datoen, hvor de 7 dage slutter, med i dag. Fra 2 dage før bygger det Fixkey fra den private kopi og installerer den på din parrede iPhone med Xcodes egne værktøjer (`xcodebuild`, `devicectl`) over den krypterede forbindelse, Xcode har til iPhonen. Det åbner ingen netværksport. Virker det ikke, viser det en dialog, hvor knappen **Geninstaller** åbner Terminal ved `./fixkey reinstall` i din Fixkey-mappe.
 
 ## Prompt-injektion
 

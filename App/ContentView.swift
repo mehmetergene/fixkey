@@ -75,6 +75,9 @@ struct ContentView: View {
                     LabeledContent("Mac", value: FixkeyConfig.usesRelay ? FixkeyConfig.macHost : "This Mac")
                     LabeledContent("Model", value: Self.shortName(macModel ?? FixkeyConfig.model))
                     LabeledContent("Connection", value: FixkeyConfig.usesRelay ? "Encrypted, Wi-Fi only" : "On this Mac")
+                    if let worksUntil = Self.worksUntil {
+                        LabeledContent("Works until", value: worksUntil.formatted(date: .abbreviated, time: .shortened))
+                    }
                     LabeledContent("Status") {
                         switch status {
                         case .checking: ProgressView()
@@ -140,6 +143,19 @@ struct ContentView: View {
     }
 
     /// "unsloth/Qwen3.5-4B-GGUF:Q4_K_M" → "Qwen3.5-4B-GGUF:Q4_K_M"
+    /// When this build stops opening (with a free Apple ID, 7 days after it was installed; the Mac renews it), read
+    /// from its provisioning profile. nil in the simulator, which has none.
+    static let worksUntil: Date? = {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let data = try? Data(contentsOf: url),
+              let start = data.range(of: Data("<?xml".utf8)),
+              let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound..<data.endIndex),
+              let plist = try? PropertyListSerialization.propertyList(from: data[start.lowerBound..<end.upperBound],
+                                                                       format: nil) as? [String: Any]
+        else { return nil }
+        return plist["ExpirationDate"] as? Date
+    }()
+
     static func shortName(_ model: String) -> String {
         model.components(separatedBy: "/").last ?? model
     }

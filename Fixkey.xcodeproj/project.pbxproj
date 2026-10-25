@@ -19,6 +19,7 @@
 		4D53487D3FB1F607FEC58728 /* FixkeyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CACE5963CA5DC2813B3CEB3 /* FixkeyConfig.swift */; };
 		53A572781D79F02A4B1C44B2 /* WordSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78DE6D1FAF4D906D6D821FB /* WordSuggestions.swift */; };
 		55E80B6763750DCD48C93E37 /* FixkeyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CACE5963CA5DC2813B3CEB3 /* FixkeyConfig.swift */; };
+		5BB93A8689DE68362D91EC29 /* PastTense.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16EA9988E08B3C5BECC97E1C /* PastTense.swift */; };
 		6352C1BA499253168E7E0E43 /* MacConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831BC5F942B44444D4BEC2AA /* MacConnection.swift */; };
 		66E0FC5C4024F0106537BC8E /* Correction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98E2F3AC56D27B90AE1EF98E /* Correction.swift */; };
 		6A0D5D96B0152C3C2BCCF940 /* MacConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831BC5F942B44444D4BEC2AA /* MacConnection.swift */; };
@@ -26,6 +27,7 @@
 		83A262D37202E54CB3F0B197 /* Guardrails.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA48DF47AE610C66A81ADC16 /* Guardrails.swift */; };
 		840256168922D32C06C38D8D /* Proofreader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56E688E6501455C790EA1137 /* Proofreader.swift */; };
 		8DE0FB12D6E5F8CB753C1D74 /* FixkeyColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DBDECBE4A6749627CE91C6E /* FixkeyColors.swift */; };
+		8ED8B194C344E7CCB13FC195 /* PastTense.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16EA9988E08B3C5BECC97E1C /* PastTense.swift */; };
 		9D0A6FE7BA52F825C97B319B /* FixkeyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF4625809B1C83BDAE678C0F /* FixkeyApp.swift */; };
 		A2B1ED957539E7DC32175FA3 /* KeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABA834A12EA72F55DA4A617C /* KeyboardView.swift */; };
 		A88508AB03F3569435EDE221 /* ChangesText.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4DC0CEB51D6F75A624613F7 /* ChangesText.swift */; };
@@ -77,6 +79,7 @@
 		005B868F6564301E3613A8B5 /* KeyboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardModel.swift; sourceTree = "<group>"; };
 		04DE4CA6C12B94B913B56793 /* KeyboardModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardModelTests.swift; sourceTree = "<group>"; };
 		0E358988DAE76FC65731938B /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		16EA9988E08B3C5BECC97E1C /* PastTense.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PastTense.swift; sourceTree = "<group>"; };
 		23E5A8AF03747471E5A509C0 /* FixkeyKeyboard.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = FixkeyKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		311D4D2280C28C6EC1ED2C21 /* FixkeyTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FixkeyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		444F1C55E44F863EAC270A77 /* CheckRange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckRange.swift; sourceTree = "<group>"; };
@@ -174,6 +177,7 @@
 				9CACE5963CA5DC2813B3CEB3 /* FixkeyConfig.swift */,
 				EA48DF47AE610C66A81ADC16 /* Guardrails.swift */,
 				831BC5F942B44444D4BEC2AA /* MacConnection.swift */,
+				16EA9988E08B3C5BECC97E1C /* PastTense.swift */,
 				56E688E6501455C790EA1137 /* Proofreader.swift */,
 				C466A360F54D2FB22CF6D03C /* WordDiff.swift */,
 			);
@@ -328,6 +332,7 @@
 				E5FDBFBB0E03FDC9966B543A /* KeyboardView.swift in Sources */,
 				E277E87A77467E28D8C97379 /* KeysUIView.swift in Sources */,
 				6352C1BA499253168E7E0E43 /* MacConnection.swift in Sources */,
+				8ED8B194C344E7CCB13FC195 /* PastTense.swift in Sources */,
 				F4C975C19F0FD4A7C4C970D6 /* Proofreader.swift in Sources */,
 				AB42FA5E2962D89119B2D99D /* WordDiff.swift in Sources */,
 				53A572781D79F02A4B1C44B2 /* WordSuggestions.swift in Sources */,
@@ -349,6 +354,7 @@
 				E552E14359364B91D498233A /* KeyboardViewController.swift in Sources */,
 				D671BDE8FF921469F10F1735 /* KeysUIView.swift in Sources */,
 				6A0D5D96B0152C3C2BCCF940 /* MacConnection.swift in Sources */,
+				5BB93A8689DE68362D91EC29 /* PastTense.swift in Sources */,
 				840256168922D32C06C38D8D /* Proofreader.swift in Sources */,
 				3047FB787F065660B059FE71 /* WordDiff.swift in Sources */,
 				D6924CFA7AEB650C0DEFA23D /* WordSuggestions.swift in Sources */,
@@ -456,7 +462,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -469,7 +475,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -517,7 +523,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -536,7 +542,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

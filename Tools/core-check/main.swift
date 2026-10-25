@@ -118,6 +118,62 @@ for test in cleanups {
     expectEqual(Proofreader.clean(test.reply, original: test.original), test.expected, "clean \(String(reflecting: test.reply))")
 }
 
+// MARK: Past tense
+
+let pastTense: [(text: String, expected: String)] = [
+    ("De har købt en ny bil i sidste uge.", "De købte en ny bil i sidste uge."),
+    ("Jeg har boet her for tre år siden.", "Jeg boede her for tre år siden."),
+    ("Vi har været i Italien sidste sommer.", "Vi var i Italien sidste sommer."),
+    ("Hun har startet på universitetet for to år siden.", "Hun startede på universitetet for to år siden."),
+    ("Vi har spist på en ny restaurant i fredags.", "Vi spiste på en ny restaurant i fredags."),
+    ("Har du set filmen i går?", "Så du filmen i går?"),
+    ("I går har jeg ikke haft tid.", "I går havde jeg ikke tid."),
+    ("Jeg har ikke spist noget i går, fordi jeg havde travlt.", "Jeg spiste ikke noget i går, fordi jeg havde travlt."),
+    ("Han sagde, at han har købt en bil i går.", "Han sagde, at han købte en bil i går."),
+    ("Bogen, som jeg har købt i går, er god.", "Bogen, som jeg købte i går, er god."),
+    ("Vi har haft det sjovt i aftes.", "Vi havde det sjovt i aftes."),
+    ("I går har der været en fest.", "I går var der en fest."),
+    ("Jeg har prøvet at ringe til dig i morges.", "Jeg prøvede at ringe til dig i morges."),
+    ("Sidste weekend har vi besøgt min mor.", "Sidste weekend besøgte vi min mor."),
+    ("De har flyttet til Aarhus for 3 år siden.", "De flyttede til Aarhus for 3 år siden."),
+    ("Jeg har kunnet se det i forgårs.", "Jeg kunne se det i forgårs."),
+    ("Hun har forstået det i går.", "Hun forstod det i går."),
+    ("Vi har mødt hinanden dengang.", "Vi mødte hinanden dengang."),
+    ("Han har vist købt en bil i går.", "Han købte vist en bil i går."),
+    ("Butikken har været lukket i mandags.", "Butikken var lukket i mandags."),
+    ("HAR DU SET HAM I GÅR?", "SÅ DU HAM I GÅR?"),
+    ("Jeg har været syg i går. Nu har jeg det bedre.", "Jeg var syg i går. Nu har jeg det bedre."),
+    ("Hej! Vi har været i Rom i sidste måned, og det var dejligt.", "Hej! Vi var i Rom i sidste måned, og det var dejligt."),
+    // Unchanged: "har" is right, or the rule can't be sure.
+    ("Jeg har ikke set ham siden i går.", "Jeg har ikke set ham siden i går."),
+    ("Jeg har boet her i tre år.", "Jeg har boet her i tre år."),
+    ("Jeg har boet her det sidste år.", "Jeg har boet her det sidste år."),
+    ("Jeg har læst bogen, som jeg købte i går.", "Jeg har læst bogen, som jeg købte i går."),
+    ("Jeg har læst bogen som jeg købte i går.", "Jeg har læst bogen som jeg købte i går."),
+    ("Jeg har sagt at han kom i går.", "Jeg har sagt at han kom i går."),
+    ("Vi har haft travlt hele ugen.", "Vi har haft travlt hele ugen."),
+    ("Det har regnet hele dagen i går.", "Det har regnet hele dagen i går."),
+    ("I dag har jeg været i byen.", "I dag har jeg været i byen."),
+    ("Jeg har spist og drukket i går.", "Jeg har spist og drukket i går."),
+    ("I går har vi spist pizza og drukket cola.", "I går har vi spist pizza og drukket cola."),
+    ("Har din bror købt en bil i går?", "Har din bror købt en bil i går?"),
+    ("Han har en bil i går.", "Han har en bil i går."),
+    ("Vi havde spist i går.", "Vi havde spist i går."),
+    ("Han er gået i går.", "Han er gået i går."),
+    ("Jeg har ladet telefonen op i går.", "Jeg har ladet telefonen op i går."),
+    ("Tak for i går, det var en dejlig aften.", "Tak for i går, det var en dejlig aften."),
+    ("Jeg har altid boet i Danmark.", "Jeg har altid boet i Danmark."),
+    ("I have seen it yesterday.", "I have seen it yesterday."),
+    ("Vi ses for", "Vi ses for"),
+    ("", ""),
+]
+for test in pastTense {
+    let fixed = PastTense.apply(test.text)
+    expectEqual(fixed, test.expected, "past tense \(String(reflecting: test.text))")
+    expectEqual(PastTense.apply(fixed), fixed, "past tense twice \(String(reflecting: test.text))")
+}
+expect(PastTense.participles.count > 200, "past tense: the verb list parses")
+
 // MARK: Network errors
 
 let errors: [(URLError.Code, Bool, Proofreader.Failure)] = [

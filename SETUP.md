@@ -97,9 +97,9 @@ The assistant speaks Danish if your Mac is set to Danish (`./fixkey setup --lang
   …
   ✓ Your first check worked
 
-8. A reminder every 7 days
-  Remind you when that happens (recommended)? [Y/n]
-  ✓ Fixkey reminds you the day before the 7 days end, and again when they have
+8. Every 7 days
+  Renew Fixkey by itself (recommended)? [Y/n]
+  ✓ Fixkey renews itself over Wi-Fi when 2 days are left, and reminds you if it can't
 ```
 
 Whenever something is missing, it says what to do and waits until you've done it. The questions it may ask:
@@ -109,7 +109,7 @@ Whenever something is missing, it says what to do and waits until you've done it
 - **Keep the model's memory use low?** Only on 8 GB Macs. Say yes.
 - **App ID.** Your own copy of the app needs a name like `com.yourname`. Press Enter to use the suggestion.
 - **Start the relay by itself when you log in?** Say yes, and you never have to start anything again. It listens only on Wi-Fi networks you allow, starting with the one the Mac is on now.
-- **Remind you when the 7 days end?** Say yes; see [Every 7 days](#every-7-days).
+- **Renew Fixkey by itself?** Say yes; see [Every 7 days](#every-7-days).
 - **Which team or iPhone?** Only if Xcode knows several teams or several iPhones are connected.
 
 ## Step 4: On the iPhone
@@ -158,20 +158,22 @@ If the relay starts by itself (you said yes when the assistant asked), there's n
 
 ## Every 7 days
 
-With a free Apple ID, apps you build yourself stop opening after 7 days. Nothing is lost: each reinstall gives 7 new days from that moment, so you can do it whenever it suits you, before or after the end.
+With a free Apple ID, apps you build yourself stop opening after 7 days, until they're reinstalled. **Fixkey renews itself** (if you said yes in step 8 of the setup): when 2 days are left, the Mac reinstalls it over Wi-Fi while the iPhone is on the same network and the Mac is awake, and shows a notification when it's done. Each reinstall gives 7 new days. The Fixkey app shows the date under **Your Mac › Works until**.
+
+If it can't (the iPhone was away for 2 days, or Xcode needs your Apple ID again), the Mac tells you the day before, and what to do. To renew by hand at any time:
 
 1. Connect the iPhone with its cable and unlock it.
 2. **Double-click `Reinstall Fixkey.command`** in the Fixkey folder. That's all; it takes a minute or two.
 
-The reminder tells you the day before the end (and again after it), with a **Reinstall** button that does the same. `./fixkey doctor` shows the exact date. If the iPhone asks you to trust your Apple ID again, see Step 4.
+`./fixkey doctor` shows the exact date. If the iPhone asks you to trust your Apple ID again, see Step 4.
 
 ## Choosing the model
 
-Fixkey recommends the model it was tested with, **Qwen3.5 4B** (45 of 53 test cases right, a second or two per check on an 8 GB M2). You can use any other model that Llama.app runs:
+Fixkey recommends the model it was tested with, **Qwen3.5 4B** (50 of 53 test cases right, a second or two per check on an 8 GB M2). You can use any other model that Llama.app runs:
 
 1. Double-click **Fixkey Setup** and choose **Choose the language model**, or run `./fixkey model`.
 2. Pick a model you already have in Llama.app, or choose **Download another model** and write its Hugging Face name with the quantization after a colon, for example `unsloth/Qwen3.5-4B-GGUF:Q4_K_M`.
-3. The assistant tests it with a sentence and offers to score it on Fixkey's 53 test cases, next to the recommended model's 45.
+3. The assistant tests it with a sentence and offers to score it on Fixkey's 53 test cases, next to the recommended model's 50.
 
 The choice is stored on the Mac and the relay applies it, so the iPhone needs nothing. On an 8 GB Mac, stay at about 4B parameters with 4-bit quantization (Q4); bigger Macs can try larger models. [model-evaluation.md](docs/en/model-evaluation.md) explains how Fixkey's tests work.
 
@@ -198,10 +200,10 @@ These instructions are for an AI coding assistant (Claude Code, Codex, Cursor or
 1. Run `./fixkey doctor`. It changes nothing. Work through its ✗ lines from the top.
 2. **Xcode.** If it's missing or not set up, ask the person to install it from the App Store, open it once and accept the license. If `xcode-select` points elsewhere, ask before running `sudo xcode-select -s /Applications/Xcode.app`.
 3. **Apple ID.** If Xcode isn't signed in, ask the person to open Xcode › Settings › Apple Accounts (Accounts in older Xcode) and add their Apple ID.
-4. **Model.** Recommend the tested model (Qwen3.5 4B, about 2.7 GB). Ask, then run `./fixkey model --yes`: it starts Llama.app, downloads the model, limits memory on 8 GB Macs and tests the model. If the person wants another model, run `./fixkey model use <owner/model-GGUF:QUANT> --yes` instead, and offer `./fixkey model evaluate` (a few minutes) to compare it with the recommended model's 45/53.
+4. **Model.** Recommend the tested model (Qwen3.5 4B, about 2.7 GB). Ask, then run `./fixkey model --yes`: it starts Llama.app, downloads the model, limits memory on 8 GB Macs and tests the model. If the person wants another model, run `./fixkey model use <owner/model-GGUF:QUANT> --yes` instead, and offer `./fixkey model evaluate` (a few minutes) to compare it with the recommended model's 50/53.
 5. **Settings.** Suggest an app ID prefix such as `com.<their first name>` in lower case and ask the person to confirm it. Then run `./fixkey configure --yes --prefix <prefix>`. If Xcode knows several teams, also pass `--team <ID>` after asking which one.
 6. **Relay.** Ask whether the relay should start by itself when they log in (recommended; it listens only on the current Wi-Fi network until they allow others). If yes, run `./fixkey autostart on --yes`. If no, start `./fixkey relay` as a long-running process in a separate terminal. Either way, run `./fixkey test` afterwards: it must say that the relay works.
 7. **iPhone.** Ask the person to connect the iPhone with a cable and unlock it, then run `./fixkey install --yes`. If it stops with a ✗, read the hint aloud, help the person do it on the iPhone (Developer Mode, Trust, unlocking), and run the command again.
 8. **Keyboard.** Guide the person through Settings › Apps › Fixkey › Keyboards: turn on Fixkey and Allow Full Access. Then have them type `jeg har ikke mye tid idag` in Notes with the Fixkey keyboard and tap the green icon. The relay's log (`~/Library/Logs/Fixkey/relay.log` with automatic start, otherwise the relay's terminal) shows `POST /v1/chat/completions  200` when the check reaches the Mac.
-9. **Reminder.** Ask whether they want a reminder when the 7 days are over (recommended). If yes, run `./fixkey reminder on --yes`.
-10. **Finish.** Tell the person: on another Wi-Fi network of theirs, run `./fixkey autostart add` (or use the menu in Fixkey Setup); every 7 days, connect the iPhone and double-click `Reinstall Fixkey.command` (each reinstall gives 7 new days); `./fixkey doctor` checks everything. Point them to `docs/en/faq.md` for questions.
+9. **Renewing.** Ask whether Fixkey should renew itself over Wi-Fi before the 7 days end, with a reminder if it can't (recommended). If yes, run `./fixkey reminder on --yes`.
+10. **Finish.** Tell the person: on another Wi-Fi network of theirs, run `./fixkey autostart add` (or use the menu in Fixkey Setup); Fixkey renews itself every 7 days over Wi-Fi, and if it can't, it says what to do (by hand: connect the iPhone and double-click `Reinstall Fixkey.command`); `./fixkey doctor` checks everything. Point them to `docs/en/faq.md` for questions.

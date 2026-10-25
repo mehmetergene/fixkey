@@ -27,9 +27,9 @@ It prints one line per suite; the full output is in `build/test-*.log`.
 | Suite | What it covers | Needs |
 |---|---|---|
 | `Tools/guardrail-check/run.sh` | 26 hand-written replies that the [guardrails](guardrails.md) must allow or block | Nothing |
-| `Tools/core-check/run.sh` | The word diff and accepting some changes (including spacing, line breaks and emoji), the reply clean-up, the check range, and what network errors mean | Nothing |
+| `Tools/core-check/run.sh` | The word diff and accepting some changes (including spacing, line breaks and emoji), the reply clean-up, the check range, the past-tense rule (44 sentences that must change or stay), and what network errors mean | Nothing |
 | `python3 -I Tools/lan-relay/test_relay.py` | The relay against a fake Llama.app: HTTPS and the certificate, the key, paths, sizes, slow and idle clients, the connection limit, logs, the chosen model, opening Llama.app on demand, network IDs and allowed networks, `--check` | Nothing |
-| `Tools/reminder/test.sh` | The 7-day reminder with a fake clock and dialog: quiet until the last day, one offer the day before, after the end at most every 12 hours, **Reinstall** opens the command, a new date starts over, Danish texts | Nothing |
+| `Tools/reminder/test.sh` | Renewing and the reminder with a fake clock, dialog and `./fixkey`: renewing from 2 days before, at most every 3 hours, a notification when renewed, the sign-in message once, the reminder when renewing fails (the day before, then every 12 hours), **Reinstall** opens the command, Danish texts | Nothing |
 | `FixkeyTests` (Xcode) | The keyboard model with a plain-string text field: accepting all, some or no changes, text that changed meanwhile, typing, capitalisation, deleting words, messages, and the tappable change text | iOS simulator |
 | `Tools/model-eval/run.sh` | The model on 53 cases, see [model-evaluation.md](model-evaluation.md) | Llama.app with the model |
 
@@ -45,7 +45,8 @@ All tools run from the repository root. The Swift tools compile `Shared/` togeth
 | `./fixkey reinstall` | Builds a release build with a fresh 7-day profile and installs it on the iPhone | No |
 | `./fixkey model [use <id> \| evaluate [<id>]]` | Chooses the model (a list, or the given Hugging Face `owner/repo:QUANT`), or scores it like `Tools/model-eval` | Yes |
 | `./fixkey autostart on\|off\|add` | Starts the relay at login on allowed networks, stops doing that, or allows the current network | No |
-| `./fixkey reminder on\|off` | The 7-day reminder | No |
+| `./fixkey reminder on\|off` | Renewing by itself over Wi-Fi, with the reminder when it can't | No |
+| `./fixkey renew` | Builds and installs over Wi-Fi with no questions, as renewing does. Exit code 0 renewed, 3 iPhone not reachable, 4 Xcode needs the Apple ID, 1 other. | No |
 | `./fixkey relay` | Runs the Wi-Fi relay in the window, when it doesn't start by itself. Stop it with Ctrl+C. | Yes |
 | `./fixkey test` | Checks the running relay the way the iPhone connects | Yes |
 | `./fixkey uninstall` | Removes the LaunchAgents and their files and logs | No |
@@ -121,11 +122,13 @@ To try the reminder without waiting for the date, run its script against a test 
 FIXKEY_SUPPORT_DIR=/tmp/fixkey-test FIXKEY_NOW=$(date +%s) FIXKEY_DRY_RUN=Later bash Tools/reminder/remind.sh
 ```
 
-The folder needs an `expiry` file (seconds since 1970) and a `reminder.conf`, as `Tools/reminder/test.sh` shows.
+The folder needs an `expiry` file (seconds since 1970) and a `reminder.conf`, as `Tools/reminder/test.sh` shows. `FIXKEY_RENEW_COMMAND` puts a stand-in in place of `./fixkey renew`.
+
+To renew right now the way the reminder does, from the copy in Application Support: `~/Library/Application\ Support/Fixkey/source/fixkey renew`. Its log is `~/Library/Logs/Fixkey/renew.log`.
 
 ## Before a commit
 
 1. `Tools/test.sh --simulator`: every suite must pass.
-2. If the prompt, examples, guardrails or model changed: `Tools/test.sh --model`, and compare with 45/53.
+2. If the prompt, examples, guardrails or model changed: `Tools/test.sh --model`, and compare with 50/53.
 3. Build for the device and try a check in a real app (Notes, Messages).
 4. `git status`: make sure `Config/Local.xcconfig`, `Tools/lan-relay/key.txt` and the `relay-*.pem` files are not listed.

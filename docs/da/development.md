@@ -27,9 +27,9 @@ Den skriver én linje pr. testsæt; hele outputtet ligger i `build/test-*.log`.
 | Testsæt | Hvad det dækker | Kræver |
 |---|---|---|
 | `Tools/guardrail-check/run.sh` | 26 håndskrevne svar, som [sikkerhedsreglerne](guardrails.md) skal tillade eller blokere | Intet |
-| `Tools/core-check/run.sh` | Forskellen ord for ord og accept af nogle ændringer (også mellemrum, linjeskift og emoji), oprydning af svaret, hvad et tjek dækker, og hvad netværksfejl betyder | Intet |
+| `Tools/core-check/run.sh` | Forskellen ord for ord og accept af nogle ændringer (også mellemrum, linjeskift og emoji), oprydning af svaret, hvad et tjek dækker, datidsreglen (44 sætninger, der skal ændres eller blive som de er), og hvad netværksfejl betyder | Intet |
 | `python3 -I Tools/lan-relay/test_relay.py` | Relæet mod en falsk Llama.app: HTTPS og certifikatet, nøglen, stier, størrelser, langsomme og passive klienter, grænsen for forbindelser, logs, den valgte model, åbning af Llama.app efter behov, netværks-id'er og tilladte netværk, `--check` | Intet |
-| `Tools/reminder/test.sh` | Påmindelsen om de 7 dage med et falsk ur og en falsk dialog: stille til den sidste dag, ét tilbud dagen før, efter slutningen højst hver 12. time, **Geninstaller** åbner kommandoen, en ny dato starter forfra, danske tekster | Intet |
+| `Tools/reminder/test.sh` | Fornyelsen og påmindelsen med et falsk ur, en falsk dialog og en erstatning for `./fixkey`: fornyelse fra 2 dage før, højst hver 3. time, en notifikation, når den er fornyet, beskeden om login én gang, påmindelsen, når fornyelsen fejler (dagen før, derefter hver 12. time), **Geninstaller** åbner kommandoen, danske tekster | Intet |
 | `FixkeyTests` (Xcode) | Tastaturmodellen med et tekstfelt af almindelig tekst: accept af alle, nogle eller ingen ændringer, tekst der er ændret imens, skrivning, store bogstaver, sletning af ord, beskeder og den tekst med ændringer, man kan trykke på | iOS-simulator |
 | `Tools/model-eval/run.sh` | Modellen på 53 tilfælde, se [model-evaluation.md](model-evaluation.md) | Llama.app med modellen |
 
@@ -45,7 +45,8 @@ Alle værktøjer køres fra repositoryets rod. Swift-værktøjerne kompilerer `S
 | `./fixkey reinstall` | Bygger en release-udgave med en ny 7-dages profil og installerer den på iPhonen | Nej |
 | `./fixkey model [use <id> \| evaluate [<id>]]` | Vælger modellen (en liste eller den angivne `ejer/repo:KVANT` fra Hugging Face) eller giver den point som `Tools/model-eval` | Ja |
 | `./fixkey autostart on\|off\|add` | Starter relæet ved login på tilladte netværk, holder op med det eller tillader det nuværende netværk | Nej |
-| `./fixkey reminder on\|off` | Påmindelsen om de 7 dage | Nej |
+| `./fixkey reminder on\|off` | Fornyelse af sig selv over Wi-Fi med påmindelsen, når den ikke kan | Nej |
+| `./fixkey renew` | Bygger og installerer over Wi-Fi uden spørgsmål, som fornyelsen gør. Slutkode 0 fornyet, 3 iPhonen kan ikke nås, 4 Xcode skal have Apple-id'et, 1 andet. | Nej |
 | `./fixkey relay` | Kører Wi-Fi-relæet i vinduet, når det ikke starter af sig selv. Stop det med Ctrl+C. | Ja |
 | `./fixkey test` | Tjekker det kørende relæ på samme måde, som iPhonen forbinder | Ja |
 | `./fixkey uninstall` | Fjerner LaunchAgents og deres filer og logs | Nej |
@@ -121,11 +122,13 @@ Vil du prøve påmindelsen uden at vente på datoen, så kør dens script mod en
 FIXKEY_SUPPORT_DIR=/tmp/fixkey-test FIXKEY_NOW=$(date +%s) FIXKEY_DRY_RUN=Later bash Tools/reminder/remind.sh
 ```
 
-Mappen skal have en `expiry`-fil (sekunder siden 1970) og en `reminder.conf`, som `Tools/reminder/test.sh` viser.
+Mappen skal have en `expiry`-fil (sekunder siden 1970) og en `reminder.conf`, som `Tools/reminder/test.sh` viser. `FIXKEY_RENEW_COMMAND` sætter en erstatning i stedet for `./fixkey renew`.
+
+Vil du forny nu, som påmindelsen gør, fra kopien i Application Support: `~/Library/Application\ Support/Fixkey/source/fixkey renew`. Dens log er `~/Library/Logs/Fixkey/renew.log`.
 
 ## Før et commit
 
 1. `Tools/test.sh --simulator`: alle testsæt skal bestå.
-2. Er prompten, eksemplerne, sikkerhedsreglerne eller modellen ændret: `Tools/test.sh --model`, og sammenlign med 45/53.
+2. Er prompten, eksemplerne, sikkerhedsreglerne eller modellen ændret: `Tools/test.sh --model`, og sammenlign med 50/53.
 3. Byg til enheden, og prøv et tjek i en rigtig app (Noter, Beskeder).
 4. `git status`: sørg for, at `Config/Local.xcconfig`, `Tools/lan-relay/key.txt` og `relay-*.pem`-filerne ikke står på listen.

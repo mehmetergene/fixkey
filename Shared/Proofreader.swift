@@ -100,7 +100,9 @@ struct Proofreader {
         let core = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !core.isEmpty else { return text }
 
-        var fixed = try await correct(core)
+        // The model starts from the past-tense rule's fix (see below), so it can't solve the tense by changing the
+        // time instead ("har boet her for tre år siden" → "har boet her i tre år").
+        var fixed = try await correct(PastTense.apply(core))
         if let violation = Guardrails.violation(original: core, fixed: fixed) { throw Failure.rejected(violation) }
 
         // Second look: small models often fix one error and miss the next. Keep the re-check only if it is
@@ -110,6 +112,8 @@ struct Proofreader {
            Guardrails.violation(original: fixed, fixed: again) == nil {
             fixed = again
         }
+        // A rule in code for the model's most common miss: "har" + participle with a fixed past time.
+        fixed = PastTense.apply(fixed)
         return Self.leadingWhitespace(of: text) + fixed + Self.trailingWhitespace(of: text)
     }
 

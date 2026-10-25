@@ -30,7 +30,7 @@ Danish and English. The keyboard layout is Danish, with æ, ø and å, and its b
 
 ### How good are the corrections?
 
-With the recommended model: good with spelling, word order, *en/et*, commas and capital letters. Its main weakness is tense: it sometimes keeps *har været* where Danish needs *var*, as in *"Vi har været i Italien sidste sommer"*. On our test set it gets 45 of 53 cases right ([details](model-evaluation.md)). Read the card before you accept: a small model can occasionally change the meaning.
+With the recommended model: good with spelling, word order, *en/et*, commas, capital letters and tense. The model alone sometimes kept *har været* where Danish needs *var*, as in *"Vi har været i Italien sidste sommer"*; a rule in code now fixes that. On our test set it gets 50 of 53 cases right; the misses are idioms such as *havde travlt* and *tage fejl af* ([details](model-evaluation.md)). Read the card before you accept: a small model can occasionally change the meaning.
 
 ### Does it work on iPad?
 
@@ -59,7 +59,7 @@ A Mac app that runs language models on your own computer. Fixkey uses it to run 
 
 ### Do I need to use Terminal?
 
-Hardly. Double-click **Fixkey Setup.command** in the Fixkey folder, and Terminal opens by itself with the setup assistant. After the setup, the same file opens a menu with everything you need later. To renew the 7 days, double-click **Reinstall Fixkey.command**.
+Hardly. Double-click **Fixkey Setup.command** in the Fixkey folder, and Terminal opens by itself with the setup assistant. After the setup, the same file opens a menu with everything you need later. Fixkey renews its 7 days by itself; to do it by hand, double-click **Reinstall Fixkey.command**.
 
 If you prefer typing, these are the commands. Run them in the Fixkey folder: open Terminal (press ⌘ Space and type *Terminal*), type `cd` and a space, drag the folder into the window, and press Enter.
 
@@ -89,7 +89,7 @@ No. A free Apple ID is enough. Apple calls this a *Personal Team*.
 
 ### Why does Fixkey stop opening after 7 days?
 
-Apple lets you put your own apps on your own iPhone for free, but each install works for only 7 days. After that the app stops opening and the keyboard stops working. Nothing is lost, and nothing on the iPhone changes: connect the iPhone to the Mac, unlock it, and double-click **Reinstall Fixkey.command** in the Fixkey folder (or run `./fixkey reinstall`). It takes a minute or two.
+Apple lets you put your own apps on your own iPhone for free, but each install works for only 7 days. After that the app stops opening and the keyboard stops working, until it's reinstalled. Fixkey does that by itself over Wi-Fi (see below). By hand: connect the iPhone to the Mac, unlock it, and double-click **Reinstall Fixkey.command** in the Fixkey folder (or run `./fixkey reinstall`). It takes a minute or two, and nothing on the iPhone changes.
 
 A paid Apple Developer Program membership (about 99 USD a year) makes an install last a year, but Fixkey doesn't need it.
 
@@ -97,13 +97,15 @@ A paid Apple Developer Program membership (about 99 USD a year) makes an install
 
 Yes, any time. Each reinstall gives 7 days from that moment, so you can do it before a trip or whenever it suits you. `./fixkey doctor` shows the exact date. After a reinstall, the iPhone may ask you to trust your Apple ID again (**Settings › General › VPN & Device Management**).
 
-### Can Fixkey remind me?
+### Does Fixkey renew itself?
 
-Yes, if you said yes to the reminder during setup. The day before the 7 days end, the Mac shows a message with a **Reinstall** button: connect and unlock the iPhone, click it, and Terminal opens and reinstalls. If you click **Later**, it asks again once the 7 days are over, at most twice a day, until you reinstall. Turn the reminder on or off in the Fixkey Setup menu, or with `./fixkey reminder on` or `off`.
+Yes, if you said yes during setup. When 2 days are left, the Mac rebuilds Fixkey and installs it on the iPhone over Wi-Fi, without a cable or a click, and shows a notification when it's done. It needs the Mac awake and the iPhone on the same network as the Mac at some point in those 2 days. It tries at most every 3 hours.
 
-### Can I renew from the iPhone?
+If it can't, the Mac tells you the day before the end, with a **Reinstall** button for the cable. If Xcode needs your Apple ID again, the message says so (see [Xcode needs my Apple ID again](#xcode-needs-my-apple-id-again)). Turn renewing on or off in the Fixkey Setup menu, or with `./fixkey reminder on` or `off`.
 
-Not yet. The Mac builds the app and installs it over the cable. A button in the app that asks the Mac to do it over Wi-Fi is on the [roadmap](roadmap.md).
+### Can I see on the iPhone how long Fixkey works?
+
+Yes: the Fixkey app shows the date under **Your Mac › Works until**. You don't need to do anything there; the Mac renews it.
 
 ### Are there other limits with a free Apple ID?
 
@@ -192,7 +194,7 @@ Yes: in the Fixkey Setup menu, choose **Stop starting the relay by itself**, or 
 
 ### macOS says items were added that can run in the background
 
-Those are Fixkey's relay and its 7-day reminder, which now start when you log in. macOS lists them under **System Settings › General › Login Items & Extensions**. Leave them allowed; `./fixkey uninstall` removes both.
+Those are Fixkey's relay and its renewing, which now start when you log in. macOS lists them under **System Settings › General › Login Items & Extensions**. Leave them allowed; `./fixkey uninstall` removes both.
 
 ### macOS asks whether Python may accept incoming connections
 
@@ -202,7 +204,7 @@ Click **Allow**. That's the relay, which needs to receive the iPhone's requests.
 
 ### Which model does Fixkey use?
 
-By default Qwen3.5 4B (`unsloth/Qwen3.5-4B-GGUF:Q4_K_M`), the model Fixkey is tested with: 45 of 53 test cases right, a second or two per check on an 8 GB M2, and about 2.7 GB on disk. The setup recommends it.
+By default Qwen3.5 4B (`unsloth/Qwen3.5-4B-GGUF:Q4_K_M`), the model Fixkey is tested with: 50 of 53 test cases right, a second or two per check on an 8 GB M2, and about 2.7 GB on disk. The setup recommends it.
 
 ### Can I use another model?
 
@@ -212,7 +214,7 @@ From then on the relay uses it for every check. The iPhone needs nothing: the Fi
 
 ### How do I know whether another model is any good?
 
-Score it: `./fixkey model evaluate` runs Fixkey's 53 test cases on the current model in a few minutes and compares the result with the recommended model's 45 (`./fixkey model evaluate <name>` scores another model). Look especially at *unchanged* and *safety*: a good model leaves correct text alone and never follows instructions written in your text. [model-evaluation.md](model-evaluation.md) explains the tests.
+Score it: `./fixkey model evaluate` runs Fixkey's 53 test cases on the current model in a few minutes and compares the result with the recommended model's 50 (`./fixkey model evaluate <name>` scores another model). Look especially at *unchanged* and *safety*: a good model leaves correct text alone and never follows instructions written in your text. [model-evaluation.md](model-evaluation.md) explains the tests.
 
 ### Which models suit my Mac?
 
@@ -234,7 +236,7 @@ Yes. The connection is encrypted (HTTPS), and the app trusts only the certificat
 
 ### What does Fixkey keep on my Mac?
 
-Your settings in `Config/Local.xcconfig` and the relay's key and certificate in `Tools/lan-relay`, readable only by your user. For the relay that starts by itself and the reminder, copies of what they need are in `~/Library/Application Support/Fixkey`, with logs in `~/Library/Logs/Fixkey`. No text, ever.
+Your settings in `Config/Local.xcconfig` and the relay's key and certificate in `Tools/lan-relay`, readable only by your user. For the relay that starts by itself and for renewing, copies of what they need (about 2 MB, your settings and key included) are in `~/Library/Application Support/Fixkey`. The builds for renewing are in `~/Library/Caches/Fixkey` (about 130 MB), and the logs in `~/Library/Logs/Fixkey`. No text, ever.
 
 ### Can Fixkey see my passwords?
 
@@ -277,7 +279,7 @@ The **Your Mac** section of the app checks the whole connection and shows a hint
 
 ### Fixkey won't open on the iPhone
 
-The 7 days are probably over. Connect the iPhone and double-click **Reinstall Fixkey.command** (or run `./fixkey reinstall`). If the iPhone then says *Untrusted Developer*, trust your Apple ID under **Settings › General › VPN & Device Management**.
+The 7 days are probably over, and the Mac couldn't renew Fixkey in time. Connect the iPhone and double-click **Reinstall Fixkey.command** (or run `./fixkey reinstall`). If the iPhone then says *Untrusted Developer*, trust your Apple ID under **Settings › General › VPN & Device Management**.
 
 ### The setup or reinstall stops with an error
 
@@ -290,6 +292,10 @@ The assistant explains the usual ones:
 - **The 3-app limit:** delete another of your own apps from the iPhone (touch and hold its icon, then **Remove App**).
 
 The full log is in the `build` folder.
+
+### Xcode needs my Apple ID again
+
+Apple sometimes asks Xcode to sign in again, and until then no app can be renewed. Fixkey says so: *"Xcode's sign-in to your Apple ID has expired or is missing"*, or a message from the renewing. Open Xcode, choose **Xcode › Settings… › Apple Accounts**, select your Apple ID and sign in. Fixkey renews itself at its next try, or double-click **Reinstall Fixkey.command**.
 
 ### The Mac gets slow while Fixkey is running
 
@@ -306,6 +312,6 @@ With git: run `git pull` in the folder, then `./fixkey setup`.
 ### How do I remove Fixkey?
 
 1. On the iPhone, touch and hold the Fixkey app and choose **Remove App**. The keyboard goes with it.
-2. On the Mac, run `./fixkey uninstall` in the Fixkey folder. It removes the relay that starts by itself, the reminder, and their files and logs.
+2. On the Mac, run `./fixkey uninstall` in the Fixkey folder. It removes the relay that starts by itself, the renewing, and their files, builds and logs.
 3. Delete the Fixkey folder.
 4. Optionally, delete the model in Llama.app, and remove the Fixkey section from `~/.config/llama/models.user.ini`.
