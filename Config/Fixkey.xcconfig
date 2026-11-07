@@ -1,0 +1,21 @@
+// Build settings shared by both targets. Your own values go in Config/Local.xcconfig (not committed):
+// ./fixkey setup writes it, or copy Local.example.xcconfig and fill it in.
+
+// Your Apple developer team (Xcode › Settings › Accounts). A free Personal Team works.
+DEVELOPMENT_TEAM =
+// Bundle IDs become <prefix>.fixkey and <prefix>.fixkey.keyboard; they must be unique to your team.
+FIXKEY_BUNDLE_ID_PREFIX = com.example
+// Your Mac's Bonjour name (System Settings › General › Sharing › Local hostname), without https://.
+FIXKEY_MAC_HOST = your-mac.local
+// Port of the Wi-Fi relay (Tools/lan-relay) that the iPhone talks to.
+FIXKEY_RELAY_PORT = 9932
+// Port of Llama.app's server, used by the simulator (Llama.app › Settings).
+FIXKEY_LLAMA_PORT = 9931
+// Same value as Tools/lan-relay/key.txt.
+FIXKEY_API_KEY =
+// SHA-256 of Tools/lan-relay/relay-cert.pem. The app trusts no other certificate for the relay.
+FIXKEY_RELAY_CERT_SHA256 =
+// The language model in Llama.app (./fixkey model). Through the relay, the Mac's current choice wins.
+FIXKEY_MODEL = unsloth/Qwen3.5-4B-GGUF:Q4_K_M
+
+#include? "Local.xcconfig"

@@ -1,0 +1,9 @@
+// Copy to Config/Local.xcconfig and fill in. That file is ignored by git. ./fixkey setup writes it for you.
+DEVELOPMENT_TEAM = ABCDE12345
+FIXKEY_BUNDLE_ID_PREFIX = com.yourname
+FIXKEY_MAC_HOST = Your-MacBook.local
+FIXKEY_RELAY_PORT = 9932
+FIXKEY_LLAMA_PORT = 9931
+FIXKEY_API_KEY = paste-the-contents-of-Tools/lan-relay/key.txt
+FIXKEY_RELAY_CERT_SHA256 = sha-256-of-Tools/lan-relay/relay-cert.pem
+FIXKEY_MODEL = unsloth/Qwen3.5-4B-GGUF:Q4_K_M

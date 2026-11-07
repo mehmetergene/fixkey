@@ -1,0 +1,61 @@
+# Status and roadmap
+
+[Dansk](../da/roadmap.md) · [Back to README](../../README.md)
+
+## Where it stands (November 2026, version 0.5.1)
+
+Fixkey is a working prototype for personal use:
+
+- The keyboard, word suggestions and autocorrect, the grammar check, guardrails and the encrypted Wi-Fi relay all work on a real iPhone.
+- The recommended model scores 50 of 53 test cases, with a median check time of 0.9 s. You can choose another.
+- Fixkey renews itself over Wi-Fi before a free Apple ID's 7 days end.
+- It's tested on an iPhone and an M2 MacBook Pro with 8 GB.
+
+## Milestones so far
+
+1. **Simulator prototype:** app and keyboard extension, the `Proofreader` against Llama.app, and the try-it screen.
+2. **Model selection:** the evaluation tool and test set. Gemma 3 4B, Qwen3.5 4B (thinking on and off) and DFM-Mimir were compared, and Qwen3.5 4B with thinking off won.
+3. **Guardrails:** rules in code that block answers, translations and rewrites, plus the guardrail test suite.
+4. **On the iPhone:** the Wi-Fi relay with a shared key, Bonjour name lookup, a Grammarly-style strip and card, and checks only on tap.
+5. **Typing aids:** word suggestions, autocorrect with undo, long-press accents, space-bar cursor, word delete, and text replacements.
+6. **Review fixes:** a code review found 12 issues; 11 were real, and all of those were fixed (selection handling, emoji cursor offsets, long-context trimming, stale results, truncated replies and more).
+7. **Apple-accurate keys:** key sizes, gaps, colours and letter position measured from Apple's keyboard.
+8. **Public release prep:** personal values and the key moved out of the code, and documentation in English and Danish.
+9. **Setup, security and an Apple-like keyboard (October 2026):**
+   - **Guided setup:** double-click `Fixkey Setup.command`; `./fixkey` asks questions and does the setup, reinstalls and checks everything (`doctor`), and a newer version in a new folder takes over the earlier settings. [SETUP.md](../../SETUP.md) works for people and for AI assistants, with a plain-language [FAQ](faq.md).
+   - **Runs by itself:** the relay starts when you log in, listens only on Wi-Fi networks you allow (stored as hashes), and opens Llama.app when a check needs it. A reminder the day before the 7 days end offers a one-click reinstall (`Reinstall Fixkey.command`), and every reinstall gives 7 new days.
+   - **Your choice of model:** `./fixkey model` picks any model in Llama.app or from Hugging Face (the tested one is recommended), `./fixkey model evaluate` scores it on the test set, and the relay applies the Mac's choice, so the iPhone needs nothing.
+   - **Security:** the relay is encrypted with a certificate the app pins, and six relay weaknesses found in a review are fixed (see [privacy-and-security.md](privacy-and-security.md#security-review-october-2026)).
+   - **Choose your changes:** tap a change in the card to leave it out.
+   - **Clear errors:** the app and keyboard say whether the Mac, the relay, Llama.app, the key or the certificate is the problem.
+   - **Letters like Apple's:** measured on the iPhone in light and dark mode; lowercase letters are now larger and higher, as on Apple's keyboard.
+   - **Tests:** relay tests, shared-code checks, keyboard unit tests, 10 new Danish model cases, and one test command (`Tools/test.sh`).
+   - **No XcodeGen needed** to build: the Xcode project is committed.
+10. **Renewing itself and the past-tense rule (October 2026):**
+    - **Renews itself:** before the 7 days end, the Mac rebuilds Fixkey and installs it over Wi-Fi when the iPhone is on the same network, then shows a notification. The reminder stays for when it can't, and says so when Xcode needs the Apple ID again. The app shows **Works until**.
+    - **Past tense:** a rule in code turns "har" + participle into the simple past when a fixed past time is in the same clause (*har været … sidste sommer* → *var*). It raised the model test from 45/53 to 50/53, with no new misses.
+    - **Safer reinstalls:** a failed build puts Xcode's cached permits back instead of losing them, and an expired Xcode sign-in is named as such.
+11. **Hardened after daily use and a second review (November 2026, version 0.5.1):**
+    - **Renewing that holds up in daily use:** in its first two weeks, renewing worked twice by itself, but once only after the 7 days had ended: one build failed while the iPhone was locked, and the iPhone was away at other tries. Renewing now builds for any iPhone, so a locked iPhone no longer stops it, and it starts 3 days before the end and tries every hour.
+    - **From an independent review** ([details](privacy-and-security.md#review-for-version-051-november-2026)): the relay sends text only to a Llama.app port held by your own account, limits error lines in its log, and follows a model change when it runs in a window. The past-tense rule leaves alone times that belong to a noun (*din besked fra i går*), clauses after *at* and quoted words. The app checks at most 1,600 characters at a time, and an update in a new folder keeps the chosen model.
+    - **Smaller fixes:** the relay looks up Llama.app's settings every 30 seconds instead of every 5, a deeply nested request no longer drops the connection, the setup stops cleanly when its input ends, `doctor` shows the end date of the app on the iPhone, and the scripts pass ShellCheck.
+
+## Known limitations
+
+- **Same network only.** The keyboard reaches the Mac on the same Wi-Fi network or over the iPhone's Personal Hotspot, not over the internet.
+- **The Mac must be on and awake,** on a Wi-Fi network you allowed. The first check after 5 idle minutes takes a few extra seconds.
+- **Model misses.** Mostly idioms (*havde travlt*, *tage fejl af*); the model can still change the meaning of a sentence (see [model-evaluation.md](model-evaluation.md)). Always read the card before accepting.
+- **Free Apple ID.** The app must be reinstalled every 7 days. Fixkey does it over Wi-Fi when the Mac is awake and the iPhone on the same network during the last 3 days, and when Xcode is signed in to the Apple ID; otherwise it asks for the cable.
+- **No emoji key.** Use the globe key to switch to Apple's keyboard for emoji.
+- **One check covers the text around the cursor:** up to about 800 characters on each side, in whole sentences.
+
+## Ideas for next steps
+
+| Idea | Why |
+|---|---|
+| Rules for common idioms (*havde travlt*, *tage fejl af*, *hvor meget*) | The model's remaining misses |
+| Reach the Mac away from home (for example over Tailscale) | Use Fixkey anywhere |
+| Server address and key set in the app instead of at build time | No rebuild when the Mac or key changes |
+| Explanations per change (*why* it's wrong) | More like Grammarly. Needs a reliable format from a small model. |
+| Try newer small models as they appear | Run them through `Tools/model-eval` |
+| Emoji key | Parity with Apple's keyboard |
